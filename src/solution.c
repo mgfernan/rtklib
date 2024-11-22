@@ -1487,7 +1487,7 @@ extern int outprcopts(uint8_t *buff, const prcopt_t *opt)
     
     p+=sprintf(p,"%s pos mode  : %s\r\n",COMMENTH,s1[opt->mode]);
     
-    if (PMODE_DGPS<=opt->mode&&opt->mode<=PMODE_FIXED) {
+    if (PMODE_DGPS<=opt->mode) {
         p+=sprintf(p,"%s freqs     : %s\r\n",COMMENTH,s2[opt->nf-1]);
     }
     if (opt->mode>PMODE_SINGLE) {
@@ -1501,9 +1501,7 @@ extern int outprcopts(uint8_t *buff, const prcopt_t *opt)
     if (opt->tidecorr & 2) p += sprintf(p, " otl");
     if (opt->tidecorr & 4) p += sprintf(p, " spole");
     p+=sprintf(p,"\r\n");
-    if (opt->mode<=PMODE_FIXED) {
-        p+=sprintf(p,"%s ionos opt : %s\r\n",COMMENTH,s4[opt->ionoopt]);
-    }
+    p+=sprintf(p,"%s ionos opt : %s\r\n",COMMENTH,s4[opt->ionoopt]);
     p+=sprintf(p,"%s tropo opt : %s\r\n",COMMENTH,s5[opt->tropopt]);
     p+=sprintf(p,"%s ephemeris : %s\r\n",COMMENTH,s6[opt->sateph]);
         p+=sprintf(p,"%s navi sys  :",COMMENTH);
