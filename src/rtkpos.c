@@ -1437,59 +1437,64 @@ static int ddres(rtk_t *rtk, const obsd_t *obs, double dt, const double *x,
 
     return nv;
 }
-/* time-interpolation of residuals (for post-processing solutions) -----------
-        time = rover time stamp
-        obs = pointer to first base observation for this epoch
-        y = pointer to base obs errors */
-static double intpres(gtime_t time, const obsd_t *obs, int n, const nav_t *nav,
-                      rtk_t *rtk, double *y)
-{
-    static obsd_t obsb[MAXOBS];
-    static double yb[MAXOBS*NFREQ*2],rs[MAXOBS*6],dts[MAXOBS*2],var[MAXOBS];
-    static double e[MAXOBS*3],azel[MAXOBS*2],freq[MAXOBS*NFREQ];
-    static int nb=0,svh[MAXOBS*2];
-    prcopt_t *opt=&rtk->opt;
-    double tt,ttb,*p,*q;
-    int i,j,k,nf=NF(opt);
 
-    tt=timediff(time,obs[0].time); /* time delta between rover obs and current base obs */
-    trace(3,"intpres : n=%d tt=%.1f, epoch=%d\n",n,tt,rtk->epoch);
-    /* use current base obs if first epoch or delta time between rover obs and
-       current base obs very small */
-    if (nb==0||rtk->epoch==0||fabs(tt)<DTTOL) {
-        nb=n; for (i=0;i<n;i++) obsb[i]=obs[i];  /* current base obs -> previous base obs */
-        return tt;
+// Time-interpolation of residuals (for post-processing solutions)
+//   time = rover time stamp
+//   obs = pointer to first base observation for this epoch
+//   y = pointer to base obs errors
+static double intpres(gtime_t time, const obsd_t *obs, int n, const nav_t *nav, rtk_t *rtk,
+                      double *y) {
+  // Time delta between rover obs and current base obs.
+  double tt = timediff(time, obs[0].time);
+  trace(3, "intpres : n=%d tt=%.1f, epoch=%d\n", n, tt, rtk->epoch);
+  // Use current base obs if first epoch or delta time between rover obs and
+  // current base obs very small.
+  if (rtk->intpres_nb == 0 || rtk->epoch == 0 || fabs(tt) < DTTOL) {
+    rtk->intpres_nb = n;
+    // Current base obs -> previous base obs.
+    for (int i = 0; i < n; i++) rtk->intpres_obsb[i] = obs[i];
+    return tt;
+  }
+  // Use current base obs if delta time between rover obs and previous base
+  // obs too large or same as between current base and rover.  Time delta
+  // between rover obs and previous base obs.
+  double ttb = timediff(time, rtk->intpres_obsb[0].time);
+  prcopt_t *opt = &rtk->opt;
+  if (fabs(ttb) > opt->maxtdiff * 2.0 || ttb == tt) return tt;
+
+  // Calculate sat positions for previous base obs.
+  double rs[MAXOBS * 6], dts[MAXOBS * 2], var[MAXOBS];
+  int svh[MAXOBS * 2];
+  satposs(time, rtk->intpres_obsb, rtk->intpres_nb, nav, opt->sateph, rs, dts, var, svh);
+
+  // Calculate [measured pseudorange - range] for previous base obs.
+  double yb[MAXOBS * NFREQ * 2], e[MAXOBS * 3], azel[MAXOBS * 2], freq[MAXOBS * NFREQ];
+  if (!zdres(1, rtk->intpres_obsb, rtk->intpres_nb, rs, dts, var, svh, nav, rtk->rb, opt, yb, e,
+             azel, freq)) {
+    return tt;
+  }
+  // Interpolate previous and current base obs.
+  int nf = NF(opt);
+  for (int i = 0; i < n; i++) {
+    // Align previous sat to current sat.
+    int j = 0;
+    for (; j < rtk->intpres_nb; j++)
+      if (rtk->intpres_obsb[j].sat == obs[i].sat) break;
+    if (j >= rtk->intpres_nb) continue;
+    // p=ptr to current obs error, q=ptr to prev obs error.
+    // tt = delta time between rover and current base obs.
+    // ttb = delta time between rover and previous base obs.
+    double *p = y + i * nf * 2, *q = yb + j * nf * 2;
+    for (int k = 0; k < nf * 2; k++, p++, q++) {
+      if (*p == 0.0 || *q == 0.0 || (obs[i].LLI[k % nf] & LLI_SLIP) ||
+          (rtk->intpres_obsb[j].LLI[k % nf] & LLI_SLIP))
+        *p = 0.0;
+      else
+        // Calculate interpolated values.
+        *p = (ttb * (*p) - tt * (*q)) / (ttb - tt);
     }
-    /* use current base obs if delta time between rover obs and previous base obs too large
-       or same as between current base and rover */
-    ttb=timediff(time,obsb[0].time); /* time delta between rover obs and previous base obs */
-
-    if (fabs(ttb)>opt->maxtdiff*2.0||ttb==tt) return tt;
-
-    /* calculate sat positions for previous base obs */
-    satposs(time,obsb,nb,nav,opt->sateph,rs,dts,var,svh);
-
-    /* calculate [measured pseudorange - range] for previous base obs */
-    if (!zdres(1,obsb,nb,rs,dts,var,svh,nav,rtk->rb,opt,yb,e,azel,freq)) {
-        return tt;
-    }
-    /* interpolate previous and current base obs */
-    for (i=0;i<n;i++) {
-        /* align previous sat to current sat */
-        for (j=0;j<nb;j++) if (obsb[j].sat==obs[i].sat) break;
-        if (j>=nb) continue;
-        /* p=ptr to current obs error, q=ptr to prev obs error,
-           tt = delta time between rover and current base obs,
-           ttb = delta time between rover and previous base obs */
-        for (k=0,p=y+i*nf*2,q=yb+j*nf*2;k<nf*2;k++,p++,q++) {
-            if (*p==0.0||*q==0.0||(obs[i].LLI[k%nf]&LLI_SLIP)||(obsb[j].LLI[k%nf]&LLI_SLIP))
-               *p=0.0;
-            else
-                /* calculate interpolated values */
-               *p=(ttb*(*p)-tt*(*q))/(ttb-tt);
-        }
-    }
-    return fabs(ttb)<fabs(tt)?ttb:tt;
+  }
+  return fabs(ttb) < fabs(tt) ? ttb : tt;
 }
 /* index for single to double-difference transformation matrix (D') --------------------*/
 static int ddidx(rtk_t *rtk, int *ix, int gps, int glo, int sbs)
@@ -2252,6 +2257,7 @@ extern void rtkinit(rtk_t *rtk, const prcopt_t *opt)
     rtk->opt=*opt;
     rtk->initial_mode=rtk->opt.mode;
     rtk->sol.thres=(float)opt->thresar[0];
+    rtk->intpres_nb=0;
 }
 /* free rtk control ------------------------------------------------------------
 * free memory for rtk control struct

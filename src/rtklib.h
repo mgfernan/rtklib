@@ -1217,6 +1217,8 @@ typedef struct {        /* RTK control/result type */
     prcopt_t opt;       /* processing options */
     int initial_mode;   /* initial positioning mode */
     int epoch;          /* epoch number */
+    int intpres_nb;     // Time interpolation of residuals, number of previous base observations.
+    obsd_t intpres_obsb[MAXOBS]; // Time interpolation of residuals, previous base observations.
 } rtk_t;
 
 typedef struct {        /* receiver raw data control type */
