@@ -200,24 +200,46 @@ static int decodepath(const char *path, int *type, char *strpath, int *fmt)
     strcpy(strpath,p+3);
     return 1;
 }
-/* read receiver commands ----------------------------------------------------*/
-static void readcmd(const char *file, char *cmd, int type)
+/* Read receiver commands ----------------------------------------------------*/
+static void readcmd(const char *file, char *cmd, size_t size, int type)
 {
-    FILE *fp;
-    char buff[MAXSTR],*p=cmd;
-    int i=0;
-    
-    *p='\0';
-    
-    if (!(fp=fopen(file,"r"))) return;
-    
-    while (fgets(buff,sizeof(buff),fp)) {
-        if (*buff=='@') i++;
-        else if (i==type&&p+strlen(buff)+1<cmd+MAXRCVCMD) {
-            p+=sprintf(p,"%s",buff);
-        }
+  cmd[0] = '\0';
+
+  FILE *fp = fopen(file, "r");
+  if (!fp) return;
+
+  int i = 0;
+  int line_start = 0;
+  size_t end = 0;
+  char buff[81];
+  while (fgets(buff, sizeof(buff), fp)) {
+    size_t avail = strlen(buff);
+    int line_end = avail > 0 && (buff[avail - 1] == '\n' || buff[avail - 1] == '\r');
+    if (line_start && *buff == '@') {
+      i++;
+      // Flush to the end of this line.
+      while (!line_end && fgets(buff, sizeof(buff), fp)) {
+        avail = strlen(buff);
+        line_end = avail > 0 && (buff[avail - 1] == '\n' || buff[avail - 1] == '\r');
+      }
+      line_start = line_end;
+      continue;
     }
-    fclose(fp);
+    line_start = line_end;
+    if (i != type) continue;
+    size_t req = end + avail + 1;
+    if (req > size) {
+      // Fill as much as possible and exit.
+      memcpy(cmd + end, buff, size - end);
+      cmd[size - 1] = '\0';
+      fprintf(stderr, "Stream command size overflow in file %s\n", file);
+      break;
+    }
+    memcpy(cmd + end, buff, avail);
+    end += avail;
+    cmd[end] = '\0';
+  }
+  fclose(fp);
 }
 
 static void deamonise(void)
@@ -381,8 +403,8 @@ int main(int argc, char **argv)
     strsetproxy(proxy);
     
     for (i=0;i<MAXSTR;i++) {
-        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i],0);
-        if (*cmdfile[i]) readcmd(cmdfile[i],cmds_periodic[i],2);
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i], sizeof(cmd_strs[0]),0);
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds_periodic[i], sizeof(cmd_periodic_strs[0]), 2);
     }
     /* start stream server */
     if (!strsvrstart(&strsvr,opts,types,(const char **)paths,(const char **)logs,conv,(const char **)cmds,(const char **)cmds_periodic,
@@ -406,7 +428,7 @@ int main(int argc, char **argv)
         sleepms(dispint);
     }
     for (i=0;i<MAXSTR;i++) {
-        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i],1);
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i],sizeof(cmd_strs[0]),1);
     }
     /* stop stream server */
     strsvrstop(&strsvr,(const char **)cmds);
