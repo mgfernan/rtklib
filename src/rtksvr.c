@@ -427,7 +427,8 @@ static void decodefile(rtksvr_t *svr, int index)
         rtksvrlock(svr);
         
         if (svr->nav.peph) free(svr->nav.peph);
-        svr->nav.ne=svr->nav.nemax=nav.ne;
+        svr->nav.ne = nav.ne;
+        svr->nav.nemax = nav.nemax;
         svr->nav.peph=nav.peph;
         svr->ftime[index]=utc2gpst(timeget());
         strcpy(svr->files[index],file);
@@ -445,7 +446,8 @@ static void decodefile(rtksvr_t *svr, int index)
         rtksvrlock(svr);
         
         if (svr->nav.pclk) free(svr->nav.pclk);
-        svr->nav.nc=svr->nav.ncmax=nav.nc;
+        svr->nav.nc = nav.nc;
+        svr->nav.ncmax = nav.ncmax;
         svr->nav.pclk=nav.pclk;
         svr->ftime[index]=utc2gpst(timeget());
         strcpy(svr->files[index],file);
