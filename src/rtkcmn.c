@@ -1006,7 +1006,7 @@ extern double *zeros(int n, int m)
     if ((p=mat(n,m))) for (n=n*m-1;n>=0;n--) p[n]=0.0;
 #else
     if (n<=0||m<=0) return NULL;
-    if (!(p=(double *)calloc(sizeof(double),n*m))) {
+    if (!(p=(double *)calloc(n*m,sizeof(double)))) {
         fatalerr("matrix memory allocation error: n=%d,m=%d\n",n,m);
     }
 #endif
