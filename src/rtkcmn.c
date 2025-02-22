@@ -2767,44 +2767,94 @@ extern int readblq(const char *file, const char *sta, double *odisp)
 *          erp_t  *erp        O   earth rotation parameters
 * return : status (1:ok,0:file open error)
 *-----------------------------------------------------------------------------*/
-extern int readerp(const char *file, erp_t *erp)
-{
-    FILE *fp;
-    erpd_t *erp_data;
-    char buff[256];
+extern int readerp(const char *file, erp_t *erp) {
+  trace(3, "readerp: file=%s\n", file);
 
-    trace(3,"readerp: file=%s\n",file);
-
-    if (!(fp=fopen(file,"r"))) {
-        trace(2,"erp file open error: file=%s\n",file);
-        return 0;
+  FILE *fp = fopen(file, "r");
+  if (!fp) {
+    trace(2, "erp file open error: file=%s\n", file);
+    return 0;
+  }
+  char buff[256];
+  int state = 0;
+  int utcp = 0, taip = 0;
+  while (fgets(buff, sizeof(buff), fp)) {
+    // Detect the IGS format, and support concatenated files.
+    if (strstr(buff, "version 2") || strstr(buff, "VERSION 2")) {
+      state = 1;
+      continue;
     }
-    while (fgets(buff,sizeof(buff),fp)) {
-        double v[14]={0};
-        if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
-                   v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13)<5) {
-            continue;
-        }
-        if (erp->n>=erp->nmax) {
-            erp->nmax=erp->nmax<=0?128:erp->nmax*2;
-            erp_data=(erpd_t *)realloc(erp->data,sizeof(erpd_t)*erp->nmax);
-            if (!erp_data) {
-                free(erp->data); erp->data=NULL; erp->n=erp->nmax=0;
-                fclose(fp);
-                return 0;
-            }
-            erp->data=erp_data;
-        }
-        erp->data[erp->n].mjd=v[0];
-        erp->data[erp->n].xp=v[1]*1E-6*AS2R;
-        erp->data[erp->n].yp=v[2]*1E-6*AS2R;
-        erp->data[erp->n].ut1_utc=v[3]*1E-7;
-        erp->data[erp->n].lod=v[4]*1E-7;
-        erp->data[erp->n].xpr=v[12]*1E-6*AS2R;
-        erp->data[erp->n++].ypr=v[13]*1E-6*AS2R;
+    if (state == 0) {
+      // Ignore content without firstly seeing the IGS format version.
+      continue;
     }
-    fclose(fp);
-    return 1;
+    if (state == 1) {
+      // IGS format content header search. Data is not read without firstly
+      // reading the content header line. A version line is detected above,
+      // and other lines are ignored. Allow some variation in case.
+      if (strstr(buff, "MJD") || strstr(buff, "mjd") || strstr(buff, "Xpole") ||
+          strstr(buff, "xpole") || strstr(buff, "Ypole") || strstr(buff, "ypole") ||
+          strstr(buff, "UT1") || strstr(buff, "ut1") || strstr(buff, "UTC") ||
+          strstr(buff, "utc") || strstr(buff, "TAI") || strstr(buff, "tai") ||
+          strstr(buff, "LOD") || strstr(buff, "lod")) {
+        // Note UTC vs TAI.
+        utcp = !!(strstr(buff, "UTC") || strstr(buff, "utc"));
+        taip = !!(strstr(buff, "TAI") || strstr(buff, "tai"));
+        state = 2;
+      }
+      continue;
+    }
+    if (state == 2) {
+      // IGS format data search. Detect data lines as containing only
+      // numeric data. A version line is detected above, and other lines are
+      // ignored.
+      int data = 0;
+      for (size_t i = 0; i < strlen(buff); i++) {
+        char ch = buff[i];
+        if (ch == '\0' || ch == '\r' || ch == '\n') break;
+        if (ch == '.' || ch == '-' || ch == '+' || ch == ' ' || ch == '\t') continue;
+        if (ch < '0' || ch > '9') {
+          data = 0;
+          break;
+        }
+        data = 1;
+      }
+      if (!data) continue;
+      double v[14] = {0};
+      if (sscanf(buff, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf", v, v + 1, v + 2,
+                 v + 3, v + 4, v + 5, v + 6, v + 7, v + 8, v + 9, v + 10, v + 11, v + 12,
+                 v + 13) < 5) {
+        continue;
+      }
+      if (erp->n >= erp->nmax) {
+        erp->nmax = erp->nmax <= 0 ? 128 : erp->nmax * 2;
+        erpd_t *erp_data = (erpd_t *)realloc(erp->data, sizeof(erpd_t) * erp->nmax);
+        if (erp_data == NULL) {
+          free(erp->data);
+          erp->data = NULL;
+          erp->n = erp->nmax = 0;
+          fclose(fp);
+          return 0;
+        }
+        erp->data = erp_data;
+      }
+      erp->data[erp->n].mjd = v[0];
+      erp->data[erp->n].xp = v[1] * 1E-6 * AS2R;
+      erp->data[erp->n].yp = v[2] * 1E-6 * AS2R;
+      erp->data[erp->n].ut1_utc = v[3] * 1E-7;
+      if (taip) {
+        // Convert UT1-TAI to UT1-UTC.
+        const double ep[] = {2000, 1, 1, 12, 0, 0};
+        gtime_t tutc = timeadd(epoch2time(ep), (v[0] - 51544.5) * 86400.0);
+        erp->data[erp->n].ut1_utc += timediff(utc2gpst(tutc), tutc) + 19;
+      }
+      erp->data[erp->n].lod = v[4] * 1E-7;
+      erp->data[erp->n].xpr = v[12] * 1E-6 * AS2R;
+      erp->data[erp->n++].ypr = v[13] * 1E-6 * AS2R;
+    }
+  }
+  fclose(fp);
+  return 1;
 }
 /* get earth rotation parameter values -----------------------------------------
 * get earth rotation parameter values
