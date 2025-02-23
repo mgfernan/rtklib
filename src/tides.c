@@ -3,8 +3,6 @@
 *
 *          Copyright (C) 2015-2017 by T.TAKASU, All rights reserved.
 *
-* options : -DIERS_MODEL use IERS tide model
-*
 * references :
 *     [1] D.D.McCarthy, IERS Technical Note 21, IERS Conventions 1996, July 1996
 *     [2] D.D.McCarthy and G.Petit, IERS Technical Note 32, IERS Conventions
@@ -25,97 +23,364 @@
 
 #define SQR(x)      ((x)*(x))
 
-#define AS2R        (D2R/3600.0)    /* arc sec to radian */
-#define GME         3.986004415E+14 /* earth gravitational constant */
-#define GMS         1.327124E+20    /* sun gravitational constant */
-#define GMM         4.902801E+12    /* moon gravitational constant */
+// The following few functions are in support of dehanttideinel. This code is
+// a translation of the respective iers fortran code to C and to RTKLIB, and
+// the reference code is included in the lib/iers/src/ directory.
 
-/* function prototypes -------------------------------------------------------*/
-#ifdef IERS_MODEL
-extern int dehanttideinel_(double *xsta, int *year, int *mon, int *day,
-                           double *fhr, double *xsun, double *xmon,
-                           double *dxtide);
+// This subroutine gives the in-phase and out-of-phase corrections induced by
+// mantle anelasticity in the long period band.
+static void step2lon_(const double xsta[3], double t, double xcorsta[3]) {
+  static const double datdi[5][9] = {{0., 0., 0., 1., 0., .47, .23, .16, .07},
+                                     {0., 2., 0., 0., 0., -.2, -.12, -.11, -.05},
+                                     {1., 0., -1., 0., 0., -.11, -.08, -.09, -.04},
+                                     {2., 0., 0., 0., 0., -.13, -.11, -.15, -.07},
+                                     {2., 0., 0., 1., 0., -.05, -.05, -.06, -.03}};
+
+  //  Compute the phase angles in degrees.
+  double s = ((t * 1.85139e-6 - .0014663889) * t + 481267.88194) * t + 218.31664563;
+  double pr = (((t * 7e-9 + 2.1e-8) * t + 3.08889e-4) * t + 1.396971278) * t;
+  s += pr;
+  double h = (((t * -6.54e-9 + 2e-8) * t + 3.0322222e-4) * t + 36000.7697489) * t + 280.46645;
+  double p =
+      (((t * 5.263e-8 - 1.24991e-5) * t - .01032172222) * t + 4069.01363525) * t + 83.35324312;
+  double zns =
+      (((t * 1.65e-8 - 2.13944e-6) * t - .00207561111) * t + 1934.13626197) * t + 234.95544499;
+  double ps =
+      (((t * -3.34e-9 - 1.778e-8) * t + 4.5688889e-4) * t + 1.71945766667) * t + 282.93734098;
+  double rsta = sqrt(xsta[0] * xsta[0] + xsta[1] * xsta[1] + xsta[2] * xsta[2]);
+  double sinphi = xsta[2] / rsta;
+  double cosphi = sqrt(xsta[0] * xsta[0] + xsta[1] * xsta[1]) / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  double sinla = xsta[1] / cosphi / rsta;
+  // Reduce angles to between the range 0 and 360.
+  s = fmod(s, 360);
+  //  tau = fmod(tau, 360)
+  h = fmod(h, 360);
+  p = fmod(p, 360);
+  zns = fmod(zns, 360);
+  ps = fmod(ps, 360);
+  double dr_tot = 0, dn_tot = 0.;
+  for (int i = 0; i < 3; ++i) xcorsta[i] = 0;
+  for (int j = 0; j < 5; ++j) {
+    double thetaf = (datdi[j][0] * s + datdi[j][1] * h + datdi[j][2] * p + datdi[j][3] * zns +
+                     datdi[j][4] * ps) *
+                    D2R;
+    double dr = datdi[j][5] * (sinphi * sinphi * 3 - 1) / 2 * cos(thetaf) +
+                datdi[j][7] * (sinphi * sinphi * 3 - 1) / 2 * sin(thetaf);
+    double dn = datdi[j][6] * (cosphi * sinphi * 2) * cos(thetaf) +
+                datdi[j][8] * (cosphi * sinphi * 2) * sin(thetaf);
+    double de = 0;
+    dr_tot += dr;
+    dn_tot += dn;
+    xcorsta[0] += dr * cosla * cosphi - de * sinla - dn * sinphi * cosla;
+    xcorsta[1] += dr * sinla * cosphi + de * cosla - dn * sinphi * sinla;
+    xcorsta[2] += dr * sinphi + dn * cosphi;
+  }
+  for (int i = 0; i < 3; ++i) xcorsta[i] /= 1e3;
+}
+
+// This subroutine gives the in-phase and out-of-phase corrections induced by
+// mantle anelasticity in the diurnal band.
+static void step2diu_(const double xsta[3], double fhr, double t, double xcorsta[3]) {
+  static const double datdi[31][9] = {{-3, 0, 2, 0, 0, -0.01, 0, 0, 0},
+                                      {-3, 2, 0, 0, 0, -0.01, 0, 0, 0},
+                                      {-2, 0, 1, -1, 0, -0.02, 0, 0, 0},
+                                      {-2, 0, 1, 0, 0, -0.08, 0, -0.01, 0.01},
+                                      {-2, 2, -1, 0, 0, -0.02, 0, 0, 0},
+                                      {-1, 0, 0, -1, 0, -0.10, 0, 0, 0},
+                                      {-1, 0, 0, 0, 0, -0.51, 0, -0.02, 0.03},
+                                      {-1, 2, 0, 0, 0, 0.01, 0, 0, 0},
+                                      {0, -2, 1, 0, 0, 0.01, 0, 0, 0},
+                                      {0, 0, -1, 0, 0, 0.02, 0, 0, 0},
+                                      {0, 0, 1, 0, 0, 0.06, 0, 0, 0},
+                                      {0, 0, 1, 1, 0, 0.01, 0, 0, 0},
+                                      {0, 2, -1, 0, 0, 0.01, 0, 0, 0},
+                                      {1, -3, 0, 0, 1, -0.06, 0, 0, 0},
+                                      {1, -2, 0, -1, 0, 0.01, 0, 0, 0},
+                                      {1, -2, 0, 0, 0, -1.23, -0.07, 0.06, 0.01},
+                                      {1, -1, 0, 0, -1, 0.02, 0, 0, 0},
+                                      {1, -1, 0, 0, 1, 0.04, 0, 0, 0},
+                                      {1, 0, 0, -1, 0, -0.22, 0.01, 0.01, 0},
+                                      {1, 0, 0, 0, 0, 12.00, -0.80, -0.67, -0.03},
+                                      {1, 0, 0, 1, 0, 1.73, -0.12, -0.10, 0},
+                                      {1, 0, 0, 2, 0, -0.04, 0, 0, 0},
+                                      {1, 1, 0, 0, -1, -0.50, -0.01, 0.03, 0},
+                                      {1, 1, 0, 0, 1, 0.01, 0, 0, 0},
+                                      {0, 1, 0, 1, -1, -0.01, 0, 0, 0},
+                                      {1, 2, -2, 0, 0, -0.01, 0, 0, 0},
+                                      {1, 2, 0, 0, 0, -0.11, 0.01, 0.01, 0},
+                                      {2, -2, 1, 0, 0, -0.01, 0, 0, 0},
+                                      {2, 0, -1, 0, 0, -0.02, 0, 0, 0},
+                                      {3, 0, 0, 0, 0, 0, 0, 0, 0},
+                                      {3, 0, 0, 1, 0, 0, 0, 0, 0}};
+  //  Compute the phase angles in degrees.
+  double s = ((t * 1.85139e-6 - .0014663889) * t + 481267.88194) * t + 218.31664563;
+  double tau =
+      fhr * 15. + 280.4606184 + ((t * -2.58e-8 + 3.8793e-4) * t + 36000.7700536) * t + (-s);
+  double pr = (((t * 7e-9 + 2.1e-8) * t + 3.08889e-4) * t + 1.396971278) * t;
+  s += pr;
+  double h__ = (((t * -6.54e-9 + 2e-8) * t + 3.0322222e-4) * t + 36000.7697489) * t + 280.46645;
+  double p =
+      (((t * 5.263e-8 - 1.24991e-5) * t - 0.01032172222) * t + 4069.01363525) * t + 83.35324312;
+  double zns =
+      (((t * 1.65e-8 - 2.13944e-6) * t - 0.00207561111) * t + 1934.13626197) * t + 234.95544499;
+  double ps =
+      (((t * -3.34e-9 - 1.778e-8) * t + 4.5688889e-4) * t + 1.71945766667) * t + 282.93734098;
+  // Reduce angles to between the range 0 and 360.
+  s = fmod(s, 360);
+  tau = fmod(tau, 360);
+  h__ = fmod(h__, 360);
+  p = fmod(p, 360);
+  zns = fmod(zns, 360);
+  ps = fmod(ps, 360);
+  double rsta = sqrt(SQR(xsta[0]) + SQR(xsta[1]) + SQR(xsta[2]));
+  double sinphi = xsta[2] / rsta;
+  double cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  double sinla = xsta[1] / cosphi / rsta;
+  double zla = atan2(xsta[1], xsta[0]);
+  // Initialize.
+  for (int i = 0; i < 3; ++i) xcorsta[i] = 0.;
+  for (int j = 0; j < 31; ++j) {
+    // Convert from degrees to radians.
+    double thetaf = (tau + datdi[j][0] * s + datdi[j][1] * h__ + datdi[j][2] * p +
+                     datdi[j][3] * zns + datdi[j][4] * ps) *
+                    D2R;
+    double dr = datdi[j][5] * 2 * sinphi * cosphi * sin(thetaf + zla) +
+                datdi[j][6] * 2 * sinphi * cosphi * cos(thetaf + zla);
+    double dn = datdi[j][7] * (SQR(cosphi) - SQR(sinphi)) * sin(thetaf + zla) +
+                datdi[j][8] * (SQR(cosphi) - SQR(sinphi)) * cos(thetaf + zla);
+    double de = datdi[j][7] * sinphi * cos(thetaf + zla) - datdi[j][8] * sinphi * sin(thetaf + zla);
+    xcorsta[0] += dr * cosla * cosphi - de * sinla - dn * sinphi * cosla;
+    xcorsta[1] += dr * sinla * cosphi + de * cosla - dn * sinphi * sinla;
+    xcorsta[2] += dr * sinphi + dn * cosphi;
+  }
+  for (int i = 0; i < 3; ++i) xcorsta[i] /= 1e3;
+}
+
+// This subroutine gives the out-of-phase corrections induced by mantle
+// anelasticity in the diurnal band.
+static void st1idiu_(const double xsta[3], const double xsun[3], const double xmon[3],
+                     double fac2sun, double fac2mon, double xcorsta[3]) {
+  const double dhi = -0.0025, dli = -7e-4;
+  // Compute the normalized position vector of the IGS station.
+  double rsta = norm(xsta, 3);
+  double sinphi = xsta[2] / rsta;
+  double cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double cos2phi = SQR(cosphi) - SQR(sinphi);
+  double sinla = xsta[1] / cosphi / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  // Compute the normalized position vector of the Moon.
+  double rmon = norm(xmon, 3);
+  // Compute the normalized position vector of the Sun.
+  double rsun = norm(xsun, 3);
+  double drsun = dhi * -3. * sinphi * cosphi * fac2sun * xsun[2] *
+                 (xsun[0] * sinla - xsun[1] * cosla) / (rsun * rsun);
+  double drmon = dhi * -3. * sinphi * cosphi * fac2mon * xmon[2] *
+                 (xmon[0] * sinla - xmon[1] * cosla) / (rmon * rmon);
+  double dnsun =
+      dli * -3. * cos2phi * fac2sun * xsun[2] * (xsun[0] * sinla - xsun[1] * cosla) / (rsun * rsun);
+  double dnmon =
+      dli * -3. * cos2phi * fac2mon * xmon[2] * (xmon[0] * sinla - xmon[1] * cosla) / (rmon * rmon);
+  double desun =
+      dli * -3. * sinphi * fac2sun * xsun[2] * (xsun[0] * cosla + xsun[1] * sinla) / (rsun * rsun);
+  double demon =
+      dli * -3. * sinphi * fac2mon * xmon[2] * (xmon[0] * cosla + xmon[1] * sinla) / (rmon * rmon);
+  double dr = drsun + drmon;
+  double dn = dnsun + dnmon;
+  double de = desun + demon;
+  //  Compute the corrections for the station.
+  xcorsta[0] = dr * cosla * cosphi - de * sinla - dn * sinphi * cosla;
+  xcorsta[1] = dr * sinla * cosphi + de * cosla - dn * sinphi * sinla;
+  xcorsta[2] = dr * sinphi + dn * cosphi;
+}
+
+// This subroutine gives the out-of-phase corrections induced by mantle
+// anelasticity in the semi-diurnal band.
+static void st1isem_(const double xsta[3], const double xsun[3], const double xmon[3],
+                     double fac2sun, double fac2mon, double xcorsta[3]) {
+  const double dhi = -0.0022, dli = -7e-4;
+  // Compute the normalized position vector of the IGS station.
+  double rsta = norm(xsta, 3);
+  double sinphi = xsta[2] / rsta;
+  double cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double sinla = xsta[1] / cosphi / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  double costwola = SQR(cosla) - SQR(sinla);
+  double sintwola = cosla * 2. * sinla;
+  // Compute the normalized position vector of the Moon.
+  double rmon = norm(xmon, 3);
+  // Compute the normalized position vector of the Sun.
+  double rsun = norm(xsun, 3);
+  double drsun = -3.0 / 4.0 * dhi * SQR(cosphi) * fac2sun *
+                 ((SQR(xsun[0]) - SQR(xsun[1])) * sintwola - xsun[0] * 2. * xsun[1] * costwola) /
+                 SQR(rsun);
+  double drmon = -3.0 / 4.0 * dhi * SQR(cosphi) * fac2mon *
+                 ((SQR(xmon[0]) - SQR(xmon[1])) * sintwola - xmon[0] * 2. * xmon[1] * costwola) /
+                 SQR(rmon);
+  double dnsun = 3.0 / 2.0 * dli * sinphi * cosphi * fac2sun *
+                 ((SQR(xsun[0]) - SQR(xsun[1])) * sintwola - xsun[0] * 2. * xsun[1] * costwola) /
+                 SQR(rsun);
+  double dnmon = 3.0 / 2.0 * dli * sinphi * cosphi * fac2mon *
+                 ((SQR(xmon[0]) - SQR(xmon[1])) * sintwola - xmon[0] * 2. * xmon[1] * costwola) /
+                 SQR(rmon);
+  double desun = -3.0 / 2.0 * dli * cosphi * fac2sun *
+                 ((SQR(xsun[0]) - SQR(xsun[1])) * costwola + xsun[0] * 2. * xsun[1] * sintwola) /
+                 SQR(rsun);
+  double demon = -3.0 / 2.0 * dli * cosphi * fac2mon *
+                 ((SQR(xmon[0]) - SQR(xmon[1])) * costwola + xmon[0] * 2. * xmon[1] * sintwola) /
+                 SQR(rmon);
+  double dr = drsun + drmon;
+  double dn = dnsun + dnmon;
+  double de = desun + demon;
+  xcorsta[0] = dr * cosla * cosphi - de * sinla - dn * sinphi * cosla;
+  xcorsta[1] = dr * sinla * cosphi + de * cosla - dn * sinphi * sinla;
+  xcorsta[2] = dr * sinphi + dn * cosphi;
+}
+
+// This subroutine gives the corrections induced by the latitude dependence
+// given by L^1 in Mathews et al. 1991 (See References).
+static void st1l1_(const double xsta[3], const double xsun[3], const double xmon[3], double fac2sun,
+                   double fac2mon, double xcorsta[3]) {
+  const double l1d = 0.0012, l1sd = 0.0024;
+  // Compute the normalized position vector of the IGS station.
+  double rsta = norm(xsta, 3);
+  double sinphi = xsta[2] / rsta;
+  double cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double sinla = xsta[1] / cosphi / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  // Compute the normalized position vector of the Moon.
+  double rmon = norm(xmon, 3);
+  // Compute the normalized position vector of the Sun.
+  double rsun = norm(xsun, 3);
+  // Compute the station corrections for the diurnal band.
+  double l1 = l1d;
+  double dnsun =
+      -l1 * SQR(sinphi) * fac2sun * xsun[2] * (xsun[0] * cosla + xsun[1] * sinla) / SQR(rsun);
+  double dnmon =
+      -l1 * SQR(sinphi) * fac2mon * xmon[2] * (xmon[0] * cosla + xmon[1] * sinla) / SQR(rmon);
+  double desun = l1 * sinphi * (SQR(cosphi) - SQR(sinphi)) * fac2sun * xsun[2] *
+                 (xsun[0] * sinla - xsun[1] * cosla) / SQR(rsun);
+  double demon = l1 * sinphi * (SQR(cosphi) - SQR(sinphi)) * fac2mon * xmon[2] *
+                 (xmon[0] * sinla - xmon[1] * cosla) / SQR(rmon);
+  double de = 3 * (desun + demon);
+  double dn = 3 * (dnsun + dnmon);
+  xcorsta[0] = -de * sinla - dn * sinphi * cosla;
+  xcorsta[1] = de * cosla - dn * sinphi * sinla;
+  xcorsta[2] = dn * cosphi;
+  // Compute the station corrections for the semi-diurnal band.
+  l1 = l1sd;
+  double costwola = SQR(cosla) - SQR(sinla);
+  double sintwola = 2 * cosla * sinla;
+  dnsun = -l1 / 2 * sinphi * cosphi * fac2sun *
+          ((SQR(xsun[0]) - SQR(xsun[1])) * costwola + xsun[0] * 2 * xsun[1] * sintwola) / SQR(rsun);
+  dnmon = -l1 / 2 * sinphi * cosphi * fac2mon *
+          ((SQR(xmon[0]) - SQR(xmon[1])) * costwola + xmon[0] * 2 * xmon[1] * sintwola) / SQR(rmon);
+  desun = -l1 / 2 * SQR(sinphi) * cosphi * fac2sun *
+          ((SQR(xsun[0]) - SQR(xsun[1])) * sintwola - xsun[0] * 2 * xsun[1] * costwola) / SQR(rsun);
+  demon = -l1 / 2 * SQR(sinphi) * cosphi * fac2mon *
+          ((SQR(xmon[0]) - SQR(xmon[1])) * sintwola - xmon[0] * 2 * xmon[1] * costwola) / SQR(rmon);
+  de = 3 * (desun + demon);
+  dn = 3 * (dnsun + dnmon);
+  xcorsta[0] += -de * sinla - dn * sinphi * cosla;
+  xcorsta[1] += +de * cosla - dn * sinphi * sinla;
+  xcorsta[2] += dn * cosphi;
+}
+
+// This subroutine computes the station tidal displacement caused by lunar and
+// solar gravitational attraction (see References).
+static void dehanttideinel(gtime_t tutc, const double xsta[3], const double xsun[3],
+                           const double xmon[3], double dxtide[3]) {
+  // Nominal second degree and third degree love numbers and shida numbers.
+  const double h20 = 0.6078, l20 = 0.0847, h3 = 0.292, l3 = 0.015;
+  // Scalar product of station vector with sun/moon vector.
+  double rsta = sqrt(SQR(xsta[0]) + SQR(xsta[1]) + SQR(xsta[2]));
+  double rsun = sqrt(SQR(xsun[0]) + SQR(xsun[1]) + SQR(xsun[2]));
+  double rmon = sqrt(SQR(xmon[0]) + SQR(xmon[1]) + SQR(xmon[2]));
+  double scs = dot(xsta, xsun, 3);
+  double scm = dot(xsta, xmon, 3);
+  double scsun = scs / rsta / rsun;
+  double scmon = scm / rsta / rmon;
+  // Computation of new h2 and l2.
+  double cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double h2 = h20 - (1 - 3.0 / 2.0 * SQR(cosphi)) * 6e-4;
+  double l2 = l20 + (1 - 3.0 / 2.0 * SQR(cosphi)) * 2e-4;
+  // P2 term
+  double p2sun = 3 * (h2 / 2 - l2) * SQR(scsun) - h2 / 2;
+  double p2mon = 3 * (h2 / 2 - l2) * SQR(scmon) - h2 / 2;
+  // P3 term
+  double p3sun = 5.0 / 2.0 * (h3 - l3 * 3) * (SQR(scsun) * scsun) + 3.0 / 2.0 * (l3 - h3) * scsun;
+  double p3mon = 5.0 / 2.0 * (h3 - l3 * 3) * (SQR(scmon) * scmon) + 3.0 / 2.0 * (l3 - h3) * scmon;
+  // Term in direction of sun/moon vector.
+  double x2sun = 3 * l2 * scsun;
+  double x2mon = 3 * l2 * scmon;
+  double x3sun = 3.0 / 2.0 * l3 * (SQR(scsun) * 5 - 1);
+  double x3mon = 3.0 / 2.0 * l3 * (SQR(scmon) * 5 - 1);
+  // Factors for sun/moon using iau current best estimates (see references).
+  const double mass_ratio_sun = 332946.0482;
+  const double mass_ratio_moon = 0.0123000371;
+  const double re = 6378136.6;
+  double resun = re / rsun;
+  double fac2sun = mass_ratio_sun * re * SQR(resun) * resun;
+  double remon = re / rmon;
+  double fac2mon = mass_ratio_moon * re * SQR(remon) * remon;
+  double fac3sun = fac2sun * resun;
+  double fac3mon = fac2mon * remon;
+  // Total displacement.
+  for (int i = 0; i < 3; i++) {
+    dxtide[i] = fac2sun * (x2sun * xsun[i] / rsun + p2sun * xsta[i] / rsta) +
+                fac2mon * (x2mon * xmon[i] / rmon + p2mon * xsta[i] / rsta) +
+                fac3sun * (x3sun * xsun[i] / rsun + p3sun * xsta[i] / rsta) +
+                fac3mon * (x3mon * xmon[i] / rmon + p3mon * xsta[i] / rsta);
+  }
+  // Corrections for the out-of-phase part of love numbers (part h_2^(0)i
+  // and l_2^(0)i )
+  //
+  // First, for the diurnal band.
+  double xcorsta[3] = {0};
+  st1idiu_(xsta, xsun, xmon, fac2sun, fac2mon, xcorsta);
+  for (int i = 0; i < 3; ++i) dxtide[i] += xcorsta[i];
+  // Second, for the semi-diurnal band.
+  st1isem_(xsta, xsun, xmon, fac2sun, fac2mon, xcorsta);
+  for (int i = 0; i < 3; ++i) dxtide[i] += xcorsta[i];
+  // Corrections for the latitude dependence of love numbers (part l^(1) )
+  st1l1_(xsta, xsun, xmon, fac2sun, fac2mon, xcorsta);
+  for (int i = 0; i < 3; ++i) dxtide[i] += xcorsta[i];
+  // Consider corrections for step 2.
+  // Corrections for the diurnal band:
+  //  First, we need to know the date converted in julian centuries
+  double ep[6];
+  time2epoch(tutc, ep);
+  double fhr = ep[3] + ep[4] / 60.0 + ep[5] / 3600.0;
+
+  // Terrestrial time.
+  gtime_t tgps = utc2gpst(tutc);
+  const double ep2000[] = {2000, 1, 1, 11, 59, 08.816};  // GPST of J2000.0
+  double t = timediff(tgps, epoch2time(ep2000)) / 86400.0 / 36525.0;
+
+  // Second, we can call the subroutine step2diu, for the diurnal band
+  // corrections, (in-phase and out-of-phase frequency dependence):
+  step2diu_(xsta, fhr, t, xcorsta);
+  for (int i = 0; i < 3; ++i) dxtide[i] += xcorsta[i];
+  // Corrections for the long-period band,
+  // (in-phase and out-of-phase frequency dependence):
+  step2lon_(xsta, t, xcorsta);
+  for (int i = 0; i < 3; ++i) dxtide[i] += xcorsta[i];
+
+#ifdef RTK_DISABLED
+  // Consider corrections for step 3.
+  // Uncorrect for the permanent tide.
+  double sinphi = xsta[1] / rsta;
+  cosphi = sqrt(SQR(xsta[0]) + SQR(xsta[1])) / rsta;
+  double cosla = xsta[0] / cosphi / rsta;
+  double sinla = xsta[1] / cosphi / rsta;
+  double dr = -sqrt(5.0 / 4.0 / PI) * h2 * 0.3146 * (SQR(sinphi) * 3.0 / 2.0 - 0.5);
+  double dn = -sqrt(5.0 / 4.0 / PI) * l2 * 0.3146 * 3 * cosphi * sinphi;
+  dxtide[0] = dxtide[0] - dr * cosla * cosphi + dn * cosla * sinphi;
+  dxtide[1] = dxtide[1] - dr * sinla * cosphi + dn * sinla * sinphi;
+  dxtide[2] = dxtide[2] - dr * sinphi - dn * cosphi;
 #endif
-
-/* solar/lunar tides (ref [2] 7) ---------------------------------------------*/
-#ifndef IERS_MODEL
-static void tide_pl(const double *eu, const double *rp, double GMp,
-                    const double *pos, double *dr)
-{
-    const double H3=0.292,L3=0.015;
-    double r,ep[3],latp,lonp,p,K2,K3,a,H2,L2,dp,du,cosp,sinl,cosl;
-    int i;
-    
-    trace(4,"tide_pl : pos=%.3f %.3f\n",pos[0]*R2D,pos[1]*R2D);
-    
-    if ((r=norm(rp,3))<=0.0) {
-        dr[0]=dr[1]=dr[2]=0;
-        return;
-    }
-    
-    for (i=0;i<3;i++) ep[i]=rp[i]/r;
-    
-    K2=GMp/GME*SQR(RE_WGS84)*SQR(RE_WGS84)/(r*r*r);
-    K3=K2*RE_WGS84/r;
-    latp=asin(ep[2]); lonp=atan2(ep[1],ep[0]);
-    cosp=cos(latp); sinl=sin(pos[0]); cosl=cos(pos[0]);
-    
-    /* step1 in phase (degree 2) */
-    p=(3.0*sinl*sinl-1.0)/2.0;
-    H2=0.6078-0.0006*p;
-    L2=0.0847+0.0002*p;
-    a=dot3(ep,eu);
-    dp=K2*3.0*L2*a;
-    du=K2*(H2*(1.5*a*a-0.5)-3.0*L2*a*a);
-    
-    /* step1 in phase (degree 3) */
-    dp+=K3*L3*(7.5*a*a-1.5);
-    du+=K3*(H3*(2.5*a*a*a-1.5*a)-L3*(7.5*a*a-1.5)*a);
-    
-    /* step1 out-of-phase (only radial) */
-    du+=3.0/4.0*0.0025*K2*sin(2.0*latp)*sin(2.0*pos[0])*sin(pos[1]-lonp);
-    du+=3.0/4.0*0.0022*K2*cosp*cosp*cosl*cosl*sin(2.0*(pos[1]-lonp));
-    
-    dr[0]=dp*ep[0]+du*eu[0];
-    dr[1]=dp*ep[1]+du*eu[1];
-    dr[2]=dp*ep[2]+du*eu[2];
-    
-    trace(5,"tide_pl : dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
 }
-/* displacement by solid earth tide (ref [2] 7) ------------------------------*/
-static void tide_solid(const double *rsun, const double *rmoon,
-                       const double *pos, const double *E, double gmst, int opt,
-                       double *dr)
-{
-    double dr1[3],dr2[3],eu[3],du,dn,sinl,sin2l;
-    
-    trace(3,"tide_solid: pos=%.3f %.3f opt=%d\n",pos[0]*R2D,pos[1]*R2D,opt);
-    
-    /* step1: time domain */
-    eu[0]=E[2]; eu[1]=E[5]; eu[2]=E[8];
-    tide_pl(eu,rsun, GMS,pos,dr1);
-    tide_pl(eu,rmoon,GMM,pos,dr2);
-    
-    /* step2: frequency domain, only K1 radial */
-    sin2l=sin(2.0*pos[0]);
-    du=-0.012*sin2l*sin(gmst+pos[1]);
-    
-    dr[0]=dr1[0]+dr2[0]+du*E[2];
-    dr[1]=dr1[1]+dr2[1]+du*E[5];
-    dr[2]=dr1[2]+dr2[2]+du*E[8];
-    
-    /* eliminate permanent deformation */
-    if (opt&8) {
-        sinl=sin(pos[0]); 
-        du=0.1196*(1.5*sinl*sinl-0.5);
-        dn=0.0247*sin2l;
-        dr[0]+=du*E[2]+dn*E[1];
-        dr[1]+=du*E[5]+dn*E[4];
-        dr[2]+=du*E[8]+dn*E[7];
-    }
-    trace(5,"tide_solid: dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
-}
-#endif /* !IERS_MODEL */
 
 /* displacement by ocean tide loading (ref [2] 7) ----------------------------*/
 static void tide_oload(gtime_t tut, const double *odisp, double *denu)
@@ -232,61 +497,49 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
 *          see ref [4] 5.2.1, 5.2.2, 5.2.3
 *          ver.2.4.0 does not use ocean loading and pole tide corrections
 *-----------------------------------------------------------------------------*/
-extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
-                     const double *odisp, double *dr)
-{
-    gtime_t tut;
-    double pos[2],E[9],drt[3],denu[3],rs[3],rm[3],gmst,erpv[5]={0};
-    int i;
-#ifdef IERS_MODEL
-    double ep[6],fhr;
-    int year,mon,day;
-#endif
-    
-    char tstr[40];
-    trace(3,"tidedisp: tutc=%s\n",time2str(tutc,tstr,0));
-    
-    if (erp) {
-        geterp(erp,utc2gpst(tutc),erpv);
-    }
-    tut=timeadd(tutc,erpv[2]);
-    
-    dr[0]=dr[1]=dr[2]=0.0;
-    
-    if (norm(rr,3)<=0.0) return;
-    
-    pos[0]=asin(rr[2]/norm(rr,3));
-    pos[1]=atan2(rr[1],rr[0]);
-    xyz2enu(pos,E);
+extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp, const double *odisp,
+                     double *dr) {
+  char tstr[40];
+  trace(3, "tidedisp: tutc=%s\n", time2str(tutc, tstr, 0));
 
-    if (opt&1) { /* solid earth tides */
-        
-        /* sun and moon position in ecef */
-        sunmoonpos(tutc,erpv,rs,rm,&gmst);
-        
-#ifdef IERS_MODEL
-        time2epoch(tutc,ep);
-        year=(int)ep[0];
-        mon =(int)ep[1];
-        day =(int)ep[2];
-        fhr =ep[3]+ep[4]/60.0+ep[5]/3600.0;
-        
-        /* call DEHANTTIDEINEL */
-        dehanttideinel_((double *)rr,&year,&mon,&day,&fhr,rs,rm,drt);
-#else
-        tide_solid(rs,rm,pos,E,gmst,opt,drt);
-#endif
-        for (i=0;i<3;i++) dr[i]+=drt[i];
-    }
-    if ((opt&2)&&odisp) { /* ocean tide loading */
-        tide_oload(tut,odisp,denu);
-        matmul("TN",3,1,3,E,denu,drt);
-        for (i=0;i<3;i++) dr[i]+=drt[i];
-    }
-    if ((opt&4)&&erp) { /* pole tide */
-        tide_pole(tut,pos,erpv,denu);
-        matmul("TN",3,1,3,E,denu,drt);
-        for (i=0;i<3;i++) dr[i]+=drt[i];
-    }
-    trace(5,"tidedisp: dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
+  double erpv[5] = {0};
+  if (erp) {
+    geterp(erp, utc2gpst(tutc), erpv);
+  }
+  gtime_t tut = timeadd(tutc, erpv[2]);
+
+  dr[0] = dr[1] = dr[2] = 0.0;
+
+  if (norm(rr, 3) <= 0.0) return;
+
+  double pos[2];
+  pos[0] = asin(rr[2] / norm(rr, 3));
+  pos[1] = atan2(rr[1], rr[0]);
+  double E[9];
+  xyz2enu(pos, E);
+
+  if (opt & 1) {  // Solid earth tides.
+    // Sun and moon position in ECEF.
+    double rs[3], rm[3];
+    sunmoonpos(tutc, erpv, rs, rm, NULL);
+    double drt[3];
+    dehanttideinel(tutc, (double *)rr, rs, rm, drt);
+    for (int i = 0; i < 3; i++) dr[i] += drt[i];
+    trace(5, "tidedisp solid: dr=%.3f %.3f %.3f\n", drt[0], drt[1], drt[2]);
+  }
+  if ((opt & 2) && odisp) {  // Ocean tide loading.
+    double denu[3];
+    tide_oload(tut, odisp, denu);
+    double drt[3];
+    matmul("TN", 3, 1, 3, E, denu, drt);
+    for (int i = 0; i < 3; i++) dr[i] += drt[i];
+  }
+  if ((opt & 4) && erp) {  // Pole tide.
+    double denu[3];
+    tide_pole(tut, pos, erpv, denu);
+    double drt[3];
+    matmul("TN", 3, 1, 3, E, denu, drt);
+    for (int i = 0; i < 3; i++) dr[i] += drt[i];
+  }
+  trace(5, "tidedisp: dr=%.3f %.3f %.3f\n", dr[0], dr[1], dr[2]);
 }
