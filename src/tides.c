@@ -899,52 +899,45 @@ static void hardisp(const gtime_t time, double samp, int irnt, const double tamp
   }
 }
 
-/* iers mean pole (ref [7] eq.7.25) ------------------------------------------*/
-static void iers_mean_pole(gtime_t tut, double *xp_bar, double *yp_bar)
-{
-    const double ep2000[]={2000,1,1,0,0,0};
-    double y,y2,y3;
-    
-    y=timediff(tut,epoch2time(ep2000))/86400.0/365.25;
-    
-    if (y<3653.0/365.25) { /* until 2010.0 */
-        y2=y*y; y3=y2*y;
-        *xp_bar= 55.974+1.8243*y+0.18413*y2+0.007024*y3; /* (mas) */
-        *yp_bar=346.346+1.7896*y-0.10729*y2-0.000908*y3;
-    }
-    else { /* after 2010.0 */
-        *xp_bar= 23.513+7.6141*y; /* (mas) */
-        *yp_bar=358.891-0.6287*y;
-    }
+
+// IERS mean pole -------------------------------------------------------------
+// Ref: https://iers-conventions.obspm.fr/conventions_material.php TN.36
+// 7.1.4 Rotational deformation due to polar motion: Secular polar motion and the pole tide.
+// Eq. 21.
+static void iers_secular_pole(gtime_t tutc, double *xp_bar, double *yp_bar) {
+  // Need 365.25 day years since J2000.0. Midday less TT to GPST (19.0 + 32.184) is:
+  const double ep2000[] = {2000, 1, 1, 11, 59, 08.816};  // GPST of J2000.0
+  gtime_t tgps = utc2gpst(tutc);
+  double y = timediff(tgps, epoch2time(ep2000)) / 86400.0 / 365.25;
+  *xp_bar = 55.0 + 1.677 * y;
+  *yp_bar = 320.5 + 3.460 * y;
 }
-/* displacement by pole tide (ref [7] eq.7.26) --------------------------------*/
-static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
-                      double *denu)
-{
-    double xp_bar,yp_bar,m1,m2,cosl,sinl;
-    
-    trace(3,"tide_pole: pos=%.3f %.3f\n",pos[0]*R2D,pos[1]*R2D);
-    
-    /* iers mean pole (mas) */
-    iers_mean_pole(tut,&xp_bar,&yp_bar);
-    
-    /* ref [7] eq.7.24 */
-    m1= erpv[0]/AS2R-xp_bar*1E-3; /* (as) */
-    m2=-erpv[1]/AS2R+yp_bar*1E-3;
-    
-    /* sin(2*theta) = sin(2*phi), cos(2*theta)=-cos(2*phi) */
-    cosl=cos(pos[1]);
-    sinl=sin(pos[1]);
-    denu[0]=  9E-3*sin(pos[0])    *(m1*sinl-m2*cosl); /* de= Slambda (m) */
-    denu[1]= -9E-3*cos(2.0*pos[0])*(m1*cosl+m2*sinl); /* dn=-Stheta  (m) */
-    denu[2]=-33E-3*sin(2.0*pos[0])*(m1*cosl+m2*sinl); /* du= Sr      (m) */
-    
-    trace(5,"tide_pole : denu=%.3f %.3f %.3f\n",denu[0],denu[1],denu[2]);
+// Displacement by pole tide (ref [7] eq.7.26) --------------------------------
+static void tide_pole(gtime_t tutc, const double *pos, const double *erpv, double *denu) {
+  trace(3, "tide_pole: pos=%.3f %.3f\n", pos[0] * R2D, pos[1] * R2D);
+
+  // IERS secular pole (mas)
+  double xp_bar, yp_bar;
+  iers_secular_pole(tutc, &xp_bar, &yp_bar);
+
+  // Ref [7] eq.7.24
+  double m1 = erpv[0] / AS2R - xp_bar * 1E-3;  // (as)
+  double m2 = -erpv[1] / AS2R + yp_bar * 1E-3;
+
+  // sin(2*theta) = sin(2*phi), cos(2*theta)=-cos(2*phi)
+  double cosl = cos(pos[1]);
+  double sinl = sin(pos[1]);
+  denu[0] = 9E-3 * sin(pos[0]) * (m1 * sinl - m2 * cosl);          // de= Slambda (m)
+  denu[1] = -9E-3 * cos(2.0 * pos[0]) * (m1 * cosl + m2 * sinl);   // dn=-Stheta  (m)
+  denu[2] = -33E-3 * sin(2.0 * pos[0]) * (m1 * cosl + m2 * sinl);  // du= Sr      (m)
+
+  trace(5, "tide_pole : denu=%.3f %.3f %.3f\n", denu[0], denu[1], denu[2]);
 }
-/* tidal displacement ----------------------------------------------------------
-* displacements by earth tides
-* args   : gtime_t tutc     I   time in utc
-*          double *rr       I   site position (ecef) (m)
+
+/* Tidal displacement ----------------------------------------------------------
+* Displacements by earth tides
+* Args   : gtime_t tutc     I   time in UTC
+*          double *rr       I   site position (ECEF) (m)
 *          int    opt       I   options (or of the followings)
 *                                 1: solid earth tide
 *                                 2: ocean tide loading
@@ -960,11 +953,10 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
 *                                 odisp[1][i][2]: consituent i phase south   (deg)
 *                                (i=0:M2,1:S2,2:N2,3:K2,4:K1,5:O1,6:P1,7:Q1,
 *                                   8:Mf,9:Mm,10:Ssa)
-*          double *dr       O   displacement by earth tides (ecef) (m)
-* return : none
-* notes  : see ref [1], [2] chap 7
+*          double *dr       O   displacement by earth tides (ECEF) (m)
+* Return : none
+* Notes  : see ref [1], [2] chap 7
 *          see ref [4] 5.2.1, 5.2.2, 5.2.3
-*          ver.2.4.0 does not use ocean loading and pole tide corrections
 *-----------------------------------------------------------------------------*/
 extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
                      const double odisp[2][11][3], double *dr) {
@@ -1010,10 +1002,11 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
   }
   if ((opt & 4) && erp) {  // Pole tide.
     double denu[3];
-    tide_pole(tut, pos, erpv, denu);
+    tide_pole(tutc, pos, erpv, denu);
     double drt[3];
     matmul("TN", 3, 1, 3, E, denu, drt);
     for (int i = 0; i < 3; i++) dr[i] += drt[i];
+    trace(5, "tidedisp spole: dr=%.3f %.3f %.3f\n", drt[0], drt[1], drt[2]);
   }
   trace(5, "tidedisp: dr=%.3f %.3f %.3f\n", dr[0], dr[1], dr[2]);
 }
