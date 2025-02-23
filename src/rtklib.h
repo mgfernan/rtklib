@@ -1078,7 +1078,7 @@ typedef struct {        /* processing options type */
     char rnxopt[2][256]; /* rinex options {rover,base} */
     int  posopt[6];     /* positioning options */
     int  syncsol;       /* solution sync mode (0:off,1:on) */
-    double odisp[2][6*11]; /* ocean tide loading parameters {rov,base} */
+    double odisp[2][2][11][3]; // Ocean tide loading parameters {rov,base}{amp,phase}
     int  freqopt;       /* disable L2-AR */
     char pppopt[256];   /* ppp option */
 } prcopt_t;
@@ -1487,7 +1487,7 @@ EXPORT int  readnav(const char *file, nav_t *nav);
 EXPORT int  savenav(const char *file, const nav_t *nav);
 EXPORT void freeobs(obs_t *obs);
 EXPORT void freenav(nav_t *nav, int opt);
-EXPORT int  readblq(const char *file, const char *sta, double *odisp);
+EXPORT int  readblq(const char *file, const char *sta, double odisp[2][11][3]);
 EXPORT int  readerp(const char *file, erp_t *erp);
 EXPORT int  geterp (const erp_t *erp, gtime_t time, double *val);
 
@@ -1584,7 +1584,7 @@ EXPORT void antmodel_s(const pcv_t *pcv, double nadir, double *dant);
 EXPORT void sunmoonpos(gtime_t tutc, const double *erpv, double *rsun,
                        double *rmoon, double *gmst);
 EXPORT void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
-                     const double *odisp, double *dr);
+                     const double odisp[2][11][3], double *dr);
 
 /* geoid models --------------------------------------------------------------*/
 EXPORT int opengeoid(int model, const char *file);

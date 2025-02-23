@@ -382,54 +382,523 @@ static void dehanttideinel(gtime_t tutc, const double xsta[3], const double xsun
 #endif
 }
 
-/* displacement by ocean tide loading (ref [2] 7) ----------------------------*/
-static void tide_oload(gtime_t tut, const double *odisp, double *denu)
-{
-    const double args[][5]={
-        {1.40519E-4, 2.0,-2.0, 0.0, 0.00},  // M2 semidiurnal principal lunar.
-        {1.45444E-4, 0.0, 0.0, 0.0, 0.00},  // S2 semidiurnal principal solar.
-        {1.37880E-4, 2.0,-3.0, 1.0, 0.00},  // N2 semidiurnal lunar elliptical.
-        {1.45842E-4, 2.0, 0.0, 0.0, 0.00},  // K2 semidiurnal luni-solar declination.
-        {0.72921E-4, 1.0, 0.0, 0.0, 0.25},  // K1 diurnal luni-solar declination.
-        {0.67598E-4, 1.0,-2.0, 0.0,-0.25},  // O1 diurnal principal lunar.
-        {0.72523E-4,-1.0, 0.0, 0.0,-0.25},  // P1 diurnal principal solar.
-        {0.64959E-4, 1.0,-3.0, 1.0,-0.25},  // Q1 diurnal elliptical lunar.
-        {0.53234E-5, 0.0, 2.0, 0.0, 0.00},  // Mf Lunar fortnightly.
-        {0.26392E-5, 0.0, 1.0,-1.0, 0.00},  // Mm Lunar monthly.
-        {0.03982E-5, 2.0, 0.0, 0.0, 0.00}   // Ssa Solar semiannual.
+// The following few functions are in support of hardisp. This code is
+// a translation of the respective iers fortran code to C and to RTKLIB, and
+// the reference code is included in the lib/iers/src/hardisp/ directory.
+
+// Stable Shell sort x and the index k.
+static void shell_sort_stable(double *x, int *k, int n) {
+  for (int i = 0; i < n; ++i) k[i] = i;
+
+  int igap = n;
+  while (igap > 1) {
+    igap /= 2;
+    int imax = n - igap, iex;
+    do {
+      iex = 0;
+      for (int i = 0; i < imax; i++) {
+        int ipl = i + igap;
+        if (x[i] <= x[ipl]) continue;
+        double sv = x[i];
+        int ik = k[i];
+        x[i] = x[ipl];
+        k[i] = k[ipl];
+        x[ipl] = sv;
+        k[ipl] = ik;
+        iex++;
+      }
+    } while (iex > 0);
+  }
+
+  // Now sort k's (for identical values of x, if any).
+  for (int j = 0; j + 1 < n; j++) {
+    if (x[j] != x[j + 1]) continue;
+    // Have at least two x's with the same value. See how long this is true.
+    int l = j + 1;
+    while (l + 1 < n) {
+      if (x[l] != x[l + 1]) break;
+      l++;
     };
-    const double ep1975[]={1975,1,1,0,0,0};
-    double ep[6],fday,days,t,t2,t3,a[5],ang,dp[3]={0};
-    int i,j;
-    
-    trace(3,"tide_oload:\n");
-    
-    /* angular argument: see subroutine arg.f for reference [1] */
-    time2epoch(tut,ep);
-    fday=ep[3]*3600.0+ep[4]*60.0+ep[5];
-    ep[3]=ep[4]=ep[5]=0.0;
-    days=timediff(epoch2time(ep),epoch2time(ep1975))/86400.0+1.0;
-    t=(27392.500528+1.000000035*days)/36525.0;
-    t2=t*t; t3=t2*t;
-    
-    a[0]=fday;
-    a[1]=(279.69668+36000.768930485*t+3.03E-4*t2)*D2R; /* H0 */
-    a[2]=(270.434358+481267.88314137*t-0.001133*t2+1.9E-6*t3)*D2R; /* S0 */
-    a[3]=(334.329653+4069.0340329577*t-0.010325*t2-1.2E-5*t3)*D2R; /* P0 */
-    a[4]=2.0*PI;
-    
-    /* displacements by 11 constituents */
-    for (i=0;i<11;i++) {
-        ang=0.0;
-        for (j=0;j<5;j++) ang+=a[j]*args[i][j];
-        for (j=0;j<3;j++) dp[j]+=odisp[j+i*6]*cos(ang-odisp[j+3+i*6]*D2R);
-    }
-    denu[0]=-dp[1];
-    denu[1]=-dp[2];
-    denu[2]= dp[0];
-    
-    trace(5,"tide_oload: denu=%.3f %.3f %.3f\n",denu[0],denu[1],denu[2]);
+    // j and l are the indices within which x(i) does not change - sort k
+    int nj = l - j + 1;
+    igap = nj;
+    while (igap > 1) {
+      igap /= 2;
+      int imax = nj - igap, iex;
+      do {
+        iex = 0;
+        for (int i = 0; i < imax; i++) {
+          int ipl = j + i + igap;
+          if (k[j + i] <= k[ipl]) continue;
+          int ik = k[j + i];
+          k[j + i] = k[ipl];
+          k[ipl] = ik;
+          iex++;
+        }
+      } while (iex > 0);
+    };
+    j = l;
+  }
 }
+// Cubic spline.
+static inline double cubic_spline_q(double u1, double x1, double u2, double x2) {
+  return (u1 / (x1 * x1) - u2 / (x2 * x2)) / (1 / x1 - 1 / x2);
+}
+// Setup cubic spline interpolation.
+static void cubic_spline(int nn, const double *x, const double *u, double *s, double *a) {
+  int n = abs(nn);
+  if (n <= 3) {
+    // Series too short for cubic spline - use straight lines.
+    for (int i = 0; i < n; i++) s[i] = 0;
+    return;
+  }
+  double q1 = cubic_spline_q(u[1] - u[0], x[1] - x[0], u[2] - u[0], x[2] - x[0]);
+  double qn = cubic_spline_q(u[n - 2] - u[n - 1], x[n - 2] - x[n - 1], u[n - 3] - u[n - 1],
+                             x[n - 3] - x[n - 1]);
+  if (nn <= 0) {
+    q1 = s[0];
+    qn = s[1];
+  }
+  s[0] = ((u[1] - u[0]) / (x[1] - x[0]) - q1) * 6;
+  int n1 = n - 1;
+  for (int i = 1; i < n1; i++) {
+    s[i] = (u[i - 1] / (x[i] - x[i - 1]) - u[i] * (1 / (x[i] - x[i - 1]) + 1 / (x[i + 1] - x[i])) +
+            u[i + 1] / (x[i + 1] - x[i])) *
+           6;
+  }
+  s[n - 1] = (qn + (u[n1 - 1] - u[n - 1]) / (x[n - 1] - x[n1 - 1])) * 6;
+  a[0] = (x[1] - x[0]) * 2;
+  a[1] = (x[1] - x[0]) * 1.5 + (x[2] - x[1]) * 2;
+  s[1] -= s[0] * 0.5;
+  for (int i = 2; i < n1; i++) {
+    double c = (x[i] - x[i - 1]) / a[i - 1];
+    a[i] = (x[i + 1] - x[i - 1]) * 2 - c * (x[i] - x[i - 1]);
+    s[i] -= c * s[i - 1];
+  }
+  double c = (x[n - 1] - x[n1 - 1]) / a[n1 - 1];
+  a[n - 1] = (2 - c) * (x[n - 1] - x[n1 - 1]);
+  s[n - 1] -= c * s[n1 - 1];
+  // Back substitute.
+  s[n - 1] /= a[n - 1];
+  for (int i = n1 - 1; i >= 0; i--) s[i] = (s[i] - (x[i + 1] - x[i]) * s[i + 1]) / a[i];
+}
+// Evaluate the cubic spline, as initialize by cubic_spline.
+static double cubic_spline_eval(double y, int nn, const double *x, const double *u,
+                                const double *s) {
+  nn = abs(nn);
+  if (nn <= 0) return 0;
+  if (nn == 1) return u[0];
+  // If y is out of range, substitute endpoint values.
+  if (y <= x[0]) return u[0];
+  if (y >= x[nn - 1]) return u[nn - 1];
+  // Locate interval (x(k1),x(k2)) which contains y.
+  int k1 = 0, k2 = 0;
+  for (int k = 1; k < nn; k++) {
+    if (x[k - 1] < y && x[k] >= y) {
+      k1 = k - 1;
+      k2 = k;
+    }
+  }
+  // Evaluate and then interpolate.
+  double dy = x[k2] - y, dy1 = y - x[k1], dk = x[k2] - x[k1];
+  double f1 = (s[k1] * dy * dy * dy + s[k2] * dy1 * dy1 * dy1) / (dk * 6);
+  double f2 = dy1 * (u[k2] / dk - s[k2] * dk / 6);
+  double f3 = dy * (u[k1] / dk - s[k1] * dk / 6);
+  return f1 + f2 + f3;
+}
+
+#define NL 8  // Processing block size, was 600 in original code but not needed here.
+#define NT 342
+#define NCON 20
+#define NTIN 11
+// This subroutine returns the frequency and phase of a tidal constituent when
+// its Doodson number is given as input, and at the given time.
+static void tdfrph(const gtime_t tut, const int idood[6], double *freq, double *phase) {
+  // Cache with the time as the key. This cache does not depend on idood[].
+  static THREADLOCAL gtime_t ctime = {0};
+  static THREADLOCAL double d[6], dd[6];
+
+  if (fabs(timediff(tut, ctime)) > 0.001) {
+    // Julian centuries from J2000.0 (ET).
+    double ep[6];
+    time2epoch(tut, ep);
+    double dayfr = ep[3] / 24.0 + ep[4] / 1440.0 + ep[5] / 86400.0;
+    gtime_t tgps = utc2gpst(tut);
+    const double ep2000[] = {2000, 1, 1, 11, 59, 08.816};  // GPST of J2000.0
+    double t = timediff(tgps, epoch2time(ep2000)) / 86400.0 / 36525.0;
+    ctime = tut;
+    // IERS expressions for the Delaunay arguments, in degrees.
+    double f1 =
+        t * (t * (t * (t * -6.8e-8 + 1.43431e-5) + 0.0088553333) + 477198.8675605) + 134.96340251;
+    double f2 =
+        t * (t * (t * (t * -3.2e-9 + 3.78e-8) - 1.536667e-4) + 35999.0502911389) + 357.5291091806;
+    double f3 =
+        t * (t * (t * (t * 1.2e-9 - 2.881e-7) - 0.003542) + 483202.0174577222) + 93.27209062;
+    double f4 = t * (t * (t * (t * -8.8e-9 + 1.8314e-6) - 0.0017696111) + 445267.1114469445) +
+                297.8501954694;
+    double f5 =
+        t * (t * (t * (t * -1.65e-8 + 2.1394e-6) + 0.0020756111) - 1934.1362619722) + 125.04455501;
+    // Convert to Doodson (Darwin) variables.
+    d[0] = dayfr * 360 - f4;
+    d[1] = f3 + f5;
+    d[2] = d[1] - f4;
+    d[3] = d[1] - f1;
+    d[4] = -f5;
+    d[5] = d[2] - f2;
+    // Find frequencies of Delauney variables (in cycles/day), and from these
+    // the same for the Doodson arguments.
+    double fd1 = t * 1.3e-9 + 0.0362916471;
+    double fd2 = 0.0027377786;
+    double fd3 = 0.0367481951 - t * 5e-10;
+    double fd4 = 0.033863192 - t * 3e-10;
+    double fd5 = t * 3e-10 - 1.470938e-4;
+    dd[0] = 1 - fd4;
+    dd[1] = fd3 + fd5;
+    dd[2] = dd[1] - fd4;
+    dd[3] = dd[1] - fd1;
+    dd[4] = -fd5;
+    dd[5] = dd[2] - fd2;
+  }
+  // End of intialization (likely to be called only once)
+  // Compute phase and frequency of the given tidal constituent.
+  *freq = 0;
+  *phase = 0;
+  for (int i = 0; i < 6; i++) {
+    *freq += idood[i] * dd[i];
+    *phase += idood[i] * d[i];
+  }
+  // Adjust phases so that they fall in the positive range 0 to 360.
+  *phase = fmod(*phase, 360);
+  if (*phase < 0) *phase += 360;
+}
+// This subroutine returns the ocean loading displacement amplitude,
+// frequency, and phase of a set of tidal constituents.
+static int admint(const gtime_t time, const double *ampin, const int idtin[][6], const double *phin,
+                  double *amp, double *f, double *p, int nin) {
+  static const double tamp[NT] = {
+      0.632208,  0.294107,  0.121046,  0.079915,  0.023818,  -0.023589, 0.022994,  0.019333,
+      -0.017871, 0.017192,  0.016018,  0.004671,  -0.004662, -0.004519, 0.00447,   0.004467,
+      0.002589,  -0.002455, -0.002172, 0.001972,  0.001947,  0.001914,  -0.001898, 0.001802,
+      0.001304,  0.00117,   0.00113,   0.001061,  -0.001022, -0.001017, 0.001014,  9.01e-4,
+      -8.57e-4,  8.55e-4,   8.55e-4,   7.72e-4,   7.41e-4,   7.41e-4,   -7.21e-4,  6.98e-4,
+      6.58e-4,   6.54e-4,   -6.53e-4,  6.33e-4,   6.26e-4,   -5.98e-4,  5.9e-4,    5.44e-4,
+      4.79e-4,   -4.64e-4,  4.13e-4,   -3.9e-4,   3.73e-4,   3.66e-4,   3.66e-4,   -3.6e-4,
+      -3.55e-4,  3.54e-4,   3.29e-4,   3.28e-4,   3.19e-4,   3.02e-4,   2.79e-4,   -2.74e-4,
+      -2.72e-4,  2.48e-4,   -2.25e-4,  2.24e-4,   -2.23e-4,  -2.16e-4,  2.11e-4,   2.09e-4,
+      1.94e-4,   1.85e-4,   -1.74e-4,  -1.71e-4,  1.59e-4,   1.31e-4,   1.27e-4,   1.2e-4,
+      1.18e-4,   1.17e-4,   1.08e-4,   1.07e-4,   1.05e-4,   -1.02e-4,  1.02e-4,   9.9e-5,
+      -9.6e-5,   9.5e-5,    -8.9e-5,   -8.5e-5,   -8.4e-5,   -8.1e-5,   -7.7e-5,   -7.2e-5,
+      -6.7e-5,   6.6e-5,    6.4e-5,    6.3e-5,    6.3e-5,    6.3e-5,    6.2e-5,    6.2e-5,
+      -6e-5,     5.6e-5,    5.3e-5,    5.1e-5,    5e-5,      0.368645,  -0.262232, -0.121995,
+      -0.050208, 0.050031,  -0.04947,  0.02062,   0.020613,  0.011279,  -0.00953,  -0.009469,
+      -0.008012, 0.007414,  -0.0073,   0.007227,  -0.007131, -0.006644, 0.005249,  0.004137,
+      0.004087,  0.003944,  0.003943,  0.00342,   0.003418,  0.002885,  0.002884,  0.00216,
+      -0.001936, 0.001934,  -0.001798, 0.00169,   0.001689,  0.001516,  0.001514,  -0.001511,
+      0.001383,  0.001372,  0.001371,  -0.001253, -0.001075, 0.00102,   9.01e-4,   8.65e-4,
+      -7.94e-4,  7.88e-4,   7.82e-4,   -7.47e-4,  -7.45e-4,  6.7e-4,    -6.03e-4,  -5.97e-4,
+      5.42e-4,   5.42e-4,   -5.41e-4,  -4.69e-4,  -4.4e-4,   4.38e-4,   4.22e-4,   4.1e-4,
+      -3.74e-4,  -3.65e-4,  3.45e-4,   3.35e-4,   -3.21e-4,  -3.19e-4,  3.07e-4,   2.91e-4,
+      2.9e-4,    -2.89e-4,  2.86e-4,   2.75e-4,   2.71e-4,   2.63e-4,   -2.45e-4,  2.25e-4,
+      2.25e-4,   2.21e-4,   -2.02e-4,  -2e-4,     -1.99e-4,  1.92e-4,   1.83e-4,   1.83e-4,
+      1.83e-4,   -1.7e-4,   1.69e-4,   1.68e-4,   1.62e-4,   1.49e-4,   -1.47e-4,  -1.41e-4,
+      1.38e-4,   1.36e-4,   1.36e-4,   1.27e-4,   1.27e-4,   -1.26e-4,  -1.21e-4,  -1.21e-4,
+      1.17e-4,   -1.16e-4,  -1.14e-4,  -1.14e-4,  -1.14e-4,  1.14e-4,   1.13e-4,   1.09e-4,
+      1.08e-4,   1.06e-4,   -1.06e-4,  -1.06e-4,  1.05e-4,   1.04e-4,   -1.03e-4,  -1e-4,
+      -1e-4,     -1e-4,     9.9e-5,    -9.8e-5,   9.3e-5,    9.3e-5,    9e-5,      -8.8e-5,
+      8.3e-5,    -8.3e-5,   -8.2e-5,   -8.1e-5,   -7.9e-5,   -7.7e-5,   -7.5e-5,   -7.5e-5,
+      -7.5e-5,   7.1e-5,    7.1e-5,    -7.1e-5,   6.8e-5,    6.8e-5,    6.5e-5,    6.5e-5,
+      6.4e-5,    6.4e-5,    6.4e-5,    -6.4e-5,   -6e-5,     5.6e-5,    5.6e-5,    5.3e-5,
+      5.3e-5,    5.3e-5,    -5.3e-5,   5.3e-5,    5.3e-5,    5.2e-5,    5e-5,      -0.066607,
+      -0.035184, -0.030988, 0.027929,  -0.027616, -0.012753, -0.006728, -0.005837, -0.005286,
+      -0.004921, -0.002884, -0.002583, -0.002422, 0.00231,   0.002283,  -0.002037, 0.001883,
+      -0.001811, -0.001687, -0.001004, -9.25e-4,  -8.44e-4,  7.66e-4,   7.66e-4,   -7e-4,
+      -4.95e-4,  -4.92e-4,  4.91e-4,   4.83e-4,   4.37e-4,   -4.16e-4,  -3.84e-4,  3.74e-4,
+      -3.12e-4,  -2.88e-4,  -2.73e-4,  2.59e-4,   2.45e-4,   -2.32e-4,  2.29e-4,   -2.16e-4,
+      2.06e-4,   -2.04e-4,  -2.02e-4,  2e-4,      1.95e-4,   -1.9e-4,   1.87e-4,   1.8e-4,
+      -1.79e-4,  1.7e-4,    1.53e-4,   -1.37e-4,  -1.19e-4,  -1.19e-4,  -1.12e-4,  -1.1e-4,
+      -1.1e-4,   1.07e-4,   -9.5e-5,   -9.5e-5,   -9.1e-5,   -9e-5,     -8.1e-5,   -7.9e-5,
+      -7.9e-5,   7.7e-5,    -7.3e-5,   6.9e-5,    -6.7e-5,   -6.6e-5,   6.5e-5,    6.4e-5,
+      -6.2e-5,   6e-5,      5.9e-5,    -5.6e-5,   5.5e-5,    -5.1e-5};
+  static const int idd[NT][6] = {
+      {2, 0, 0, 0, 0, 0},    {2, 2, -2, 0, 0, 0},   {2, -1, 0, 1, 0, 0},   {2, 2, 0, 0, 0, 0},
+      {2, 2, 0, 0, 1, 0},    {2, 0, 0, 0, -1, 0},   {2, -1, 2, -1, 0, 0},  {2, -2, 2, 0, 0, 0},
+      {2, 1, 0, -1, 0, 0},   {2, 2, -3, 0, 0, 1},   {2, -2, 0, 2, 0, 0},   {2, -3, 2, 1, 0, 0},
+      {2, 1, -2, 1, 0, 0},   {2, -1, 0, 1, -1, 0},  {2, 3, 0, -1, 0, 0},   {2, 1, 0, 1, 0, 0},
+      {2, 2, 0, 0, 2, 0},    {2, 2, -1, 0, 0, -1},  {2, 0, -1, 0, 0, 1},   {2, 1, 0, 1, 1, 0},
+      {2, 3, 0, -1, 1, 0},   {2, 0, 1, 0, 0, -1},   {2, 0, -2, 2, 0, 0},   {2, -3, 0, 3, 0, 0},
+      {2, -2, 3, 0, 0, -1},  {2, 4, 0, 0, 0, 0},    {2, -1, 1, 1, 0, -1},  {2, -1, 3, -1, 0, -1},
+      {2, 2, 0, 0, -1, 0},   {2, -1, -1, 1, 0, 1},  {2, 4, 0, 0, 1, 0},    {2, -3, 4, -1, 0, 0},
+      {2, -1, 2, -1, -1, 0}, {2, 3, -2, 1, 0, 0},   {2, 1, 2, -1, 0, 0},   {2, -4, 2, 2, 0, 0},
+      {2, 4, -2, 0, 0, 0},   {2, 0, 2, 0, 0, 0},    {2, -2, 2, 0, -1, 0},  {2, 2, -4, 0, 0, 2},
+      {2, 2, -2, 0, -1, 0},  {2, 1, 0, -1, -1, 0},  {2, -1, 1, 0, 0, 0},   {2, 2, -1, 0, 0, 1},
+      {2, 2, 1, 0, 0, -1},   {2, -2, 0, 2, -1, 0},  {2, -2, 4, -2, 0, 0},  {2, 2, 2, 0, 0, 0},
+      {2, -4, 4, 0, 0, 0},   {2, -1, 0, -1, -2, 0}, {2, 1, 2, -1, 1, 0},   {2, -1, -2, 3, 0, 0},
+      {2, 3, -2, 1, 1, 0},   {2, 4, 0, -2, 0, 0},   {2, 0, 0, 2, 0, 0},    {2, 0, 2, -2, 0, 0},
+      {2, 0, 2, 0, 1, 0},    {2, -3, 3, 1, 0, -1},  {2, 0, 0, 0, -2, 0},   {2, 4, 0, 0, 2, 0},
+      {2, 4, -2, 0, 1, 0},   {2, 0, 0, 0, 0, 2},    {2, 1, 0, 1, 2, 0},    {2, 0, -2, 0, -2, 0},
+      {2, -2, 1, 0, 0, 1},   {2, -2, 1, 2, 0, -1},  {2, -1, 1, -1, 0, 1},  {2, 5, 0, -1, 0, 0},
+      {2, 1, -3, 1, 0, 1},   {2, -2, -1, 2, 0, 1},  {2, 3, 0, -1, 2, 0},   {2, 1, -2, 1, -1, 0},
+      {2, 5, 0, -1, 1, 0},   {2, -4, 0, 4, 0, 0},   {2, -3, 2, 1, -1, 0},  {2, -2, 1, 1, 0, 0},
+      {2, 4, 0, -2, 1, 0},   {2, 0, 0, 2, 1, 0},    {2, -5, 4, 1, 0, 0},   {2, 0, 2, 0, 2, 0},
+      {2, -1, 2, 1, 0, 0},   {2, 5, -2, -1, 0, 0},  {2, 1, -1, 0, 0, 0},   {2, 2, -2, 0, 0, 2},
+      {2, -5, 2, 3, 0, 0},   {2, -1, -2, 1, -2, 0}, {2, -3, 5, -1, 0, -1}, {2, -1, 0, 0, 0, 1},
+      {2, -2, 0, 0, -2, 0},  {2, 0, -1, 1, 0, 0},   {2, -3, 1, 1, 0, 1},   {2, 3, 0, -1, -1, 0},
+      {2, 1, 0, 1, -1, 0},   {2, -1, 2, 1, 1, 0},   {2, 0, -3, 2, 0, 1},   {2, 1, -1, -1, 0, 1},
+      {2, -3, 0, 3, -1, 0},  {2, 0, -2, 2, -1, 0},  {2, -4, 3, 2, 0, -1},  {2, -1, 0, 1, -2, 0},
+      {2, 5, 0, -1, 2, 0},   {2, -4, 5, 0, 0, -1},  {2, -2, 4, 0, 0, -2},  {2, -1, 0, 1, 0, 2},
+      {2, -2, -2, 4, 0, 0},  {2, 3, -2, -1, -1, 0}, {2, -2, 5, -2, 0, -1}, {2, 0, -1, 0, -1, 1},
+      {2, 5, -2, -1, 1, 0},  {1, 1, 0, 0, 0, 0},    {1, -1, 0, 0, 0, 0},   {1, 1, -2, 0, 0, 0},
+      {1, -2, 0, 1, 0, 0},   {1, 1, 0, 0, 1, 0},    {1, -1, 0, 0, -1, 0},  {1, 2, 0, -1, 0, 0},
+      {1, 0, 0, 1, 0, 0},    {1, 3, 0, 0, 0, 0},    {1, -2, 2, -1, 0, 0},  {1, -2, 0, 1, -1, 0},
+      {1, -3, 2, 0, 0, 0},   {1, 0, 0, -1, 0, 0},   {1, 1, 0, 0, -1, 0},   {1, 3, 0, 0, 1, 0},
+      {1, 1, -3, 0, 0, 1},   {1, -3, 0, 2, 0, 0},   {1, 1, 2, 0, 0, 0},    {1, 0, 0, 1, 1, 0},
+      {1, 2, 0, -1, 1, 0},   {1, 0, 2, -1, 0, 0},   {1, 2, -2, 1, 0, 0},   {1, 3, -2, 0, 0, 0},
+      {1, -1, 2, 0, 0, 0},   {1, 1, 1, 0, 0, -1},   {1, 1, -1, 0, 0, 1},   {1, 4, 0, -1, 0, 0},
+      {1, -4, 2, 1, 0, 0},   {1, 0, -2, 1, 0, 0},   {1, -2, 2, -1, -1, 0}, {1, 3, 0, -2, 0, 0},
+      {1, -1, 0, 2, 0, 0},   {1, -1, 0, 0, -2, 0},  {1, 3, 0, 0, 2, 0},    {1, -3, 2, 0, -1, 0},
+      {1, 4, 0, -1, 1, 0},   {1, 0, 0, -1, -1, 0},  {1, 1, -2, 0, -1, 0},  {1, -3, 0, 2, -1, 0},
+      {1, 1, 0, 0, 2, 0},    {1, 1, -1, 0, 0, -1},  {1, -1, -1, 0, 0, 1},  {1, 0, 2, -1, 1, 0},
+      {1, -1, 1, 0, 0, -1},  {1, -1, -2, 2, 0, 0},  {1, 2, -2, 1, 1, 0},   {1, -4, 0, 3, 0, 0},
+      {1, -1, 2, 0, 1, 0},   {1, 3, -2, 0, 1, 0},   {1, 2, 0, -1, -1, 0},  {1, 0, 0, 1, -1, 0},
+      {1, -2, 2, 1, 0, 0},   {1, 4, -2, -1, 0, 0},  {1, -3, 3, 0, 0, -1},  {1, -2, 1, 1, 0, -1},
+      {1, -2, 3, -1, 0, -1}, {1, 0, -2, 1, -1, 0},  {1, -2, -1, 1, 0, 1},  {1, 4, -2, 1, 0, 0},
+      {1, -4, 4, -1, 0, 0},  {1, -4, 2, 1, -1, 0},  {1, 5, -2, 0, 0, 0},   {1, 3, 0, -2, 1, 0},
+      {1, -5, 2, 2, 0, 0},   {1, 2, 0, 1, 0, 0},    {1, 1, 3, 0, 0, -1},   {1, -2, 0, 1, -2, 0},
+      {1, 4, 0, -1, 2, 0},   {1, 1, -4, 0, 0, 2},   {1, 5, 0, -2, 0, 0},   {1, -1, 0, 2, 1, 0},
+      {1, -2, 1, 0, 0, 0},   {1, 4, -2, 1, 1, 0},   {1, -3, 4, -2, 0, 0},  {1, -1, 3, 0, 0, -1},
+      {1, 3, -3, 0, 0, 1},   {1, 5, -2, 0, 1, 0},   {1, 1, 2, 0, 1, 0},    {1, 2, 0, 1, 1, 0},
+      {1, -5, 4, 0, 0, 0},   {1, -2, 0, -1, -2, 0}, {1, 5, 0, -2, 1, 0},   {1, 1, 2, -2, 0, 0},
+      {1, 1, -2, 2, 0, 0},   {1, -2, 2, 1, 1, 0},   {1, 0, 3, -1, 0, -1},  {1, 2, -3, 1, 0, 1},
+      {1, -2, -2, 3, 0, 0},  {1, -1, 2, -2, 0, 0},  {1, -4, 3, 1, 0, -1},  {1, -4, 0, 3, -1, 0},
+      {1, -1, -2, 2, -1, 0}, {1, -2, 0, 3, 0, 0},   {1, 4, 0, -3, 0, 0},   {1, 0, 1, 1, 0, -1},
+      {1, 2, -1, -1, 0, 1},  {1, 2, -2, 1, -1, 0},  {1, 0, 0, -1, -2, 0},  {1, 2, 0, 1, 2, 0},
+      {1, 2, -2, -1, -1, 0}, {1, 0, 0, 1, 2, 0},    {1, 0, 1, 0, 0, 0},    {1, 2, -1, 0, 0, 0},
+      {1, 0, 2, -1, -1, 0},  {1, -1, -2, 0, -2, 0}, {1, -3, 1, 0, 0, 1},   {1, 3, -2, 0, -1, 0},
+      {1, -1, -1, 0, -1, 1}, {1, 4, -2, -1, 1, 0},  {1, 2, 1, -1, 0, -1},  {1, 0, -1, 1, 0, 1},
+      {1, -2, 4, -1, 0, 0},  {1, 4, -4, 1, 0, 0},   {1, -3, 1, 2, 0, -1},  {1, -3, 3, 0, -1, -1},
+      {1, 1, 2, 0, 2, 0},    {1, 1, -2, 0, -2, 0},  {1, 3, 0, 0, 3, 0},    {1, -1, 2, 0, -1, 0},
+      {1, -2, 1, -1, 0, 1},  {1, 0, -3, 1, 0, 1},   {1, -3, -1, 2, 0, 1},  {1, 2, 0, -1, 2, 0},
+      {1, 6, -2, -1, 0, 0},  {1, 2, 2, -1, 0, 0},   {1, -1, 1, 0, -1, -1}, {1, -2, 3, -1, -1, -1},
+      {1, -1, 0, 0, 0, 2},   {1, -5, 0, 4, 0, 0},   {1, 1, 0, 0, 0, -2},   {1, -2, 1, 1, -1, -1},
+      {1, 1, -1, 0, 1, 1},   {1, 1, 2, 0, 0, -2},   {1, -3, 1, 1, 0, 0},   {1, -4, 4, -1, -1, 0},
+      {1, 1, 0, -2, -1, 0},  {1, -2, -1, 1, -1, 1}, {1, -3, 2, 2, 0, 0},   {1, 5, -2, -2, 0, 0},
+      {1, 3, -4, 2, 0, 0},   {1, 1, -2, 0, 0, 2},   {1, -1, 4, -2, 0, 0},  {1, 2, 2, -1, 1, 0},
+      {1, -5, 2, 2, -1, 0},  {1, 1, -3, 0, -1, 1},  {1, 1, 1, 0, 1, -1},   {1, 6, -2, -1, 1, 0},
+      {1, -2, 2, -1, -2, 0}, {1, 4, -2, 1, 2, 0},   {1, -6, 4, 1, 0, 0},   {1, 5, -4, 0, 0, 0},
+      {1, -3, 4, 0, 0, 0},   {1, 1, 2, -2, 1, 0},   {1, -2, 1, 0, -1, 0},  {0, 2, 0, 0, 0, 0},
+      {0, 1, 0, -1, 0, 0},   {0, 0, 2, 0, 0, 0},    {0, 0, 0, 0, 1, 0},    {0, 2, 0, 0, 1, 0},
+      {0, 3, 0, -1, 0, 0},   {0, 1, -2, 1, 0, 0},   {0, 2, -2, 0, 0, 0},   {0, 3, 0, -1, 1, 0},
+      {0, 0, 1, 0, 0, -1},   {0, 2, 0, -2, 0, 0},   {0, 2, 0, 0, 2, 0},    {0, 3, -2, 1, 0, 0},
+      {0, 1, 0, -1, -1, 0},  {0, 1, 0, -1, 1, 0},   {0, 4, -2, 0, 0, 0},   {0, 1, 0, 1, 0, 0},
+      {0, 0, 3, 0, 0, -1},   {0, 4, 0, -2, 0, 0},   {0, 3, -2, 1, 1, 0},   {0, 3, -2, -1, 0, 0},
+      {0, 4, -2, 0, 1, 0},   {0, 0, 2, 0, 1, 0},    {0, 1, 0, 1, 1, 0},    {0, 4, 0, -2, 1, 0},
+      {0, 3, 0, -1, 2, 0},   {0, 5, -2, -1, 0, 0},  {0, 1, 2, -1, 0, 0},   {0, 1, -2, 1, -1, 0},
+      {0, 1, -2, 1, 1, 0},   {0, 2, -2, 0, -1, 0},  {0, 2, -3, 0, 0, 1},   {0, 2, -2, 0, 1, 0},
+      {0, 0, 2, -2, 0, 0},   {0, 1, -3, 1, 0, 1},   {0, 0, 0, 0, 2, 0},    {0, 0, 1, 0, 0, 1},
+      {0, 1, 2, -1, 1, 0},   {0, 3, 0, -3, 0, 0},   {0, 2, 1, 0, 0, -1},   {0, 1, -1, -1, 0, 1},
+      {0, 1, 0, 1, 2, 0},    {0, 5, -2, -1, 1, 0},  {0, 2, -1, 0, 0, 1},   {0, 2, 2, -2, 0, 0},
+      {0, 1, -1, 0, 0, 0},   {0, 5, 0, -3, 0, 0},   {0, 2, 0, -2, 1, 0},   {0, 1, 1, -1, 0, -1},
+      {0, 3, -4, 1, 0, 0},   {0, 0, 2, 0, 2, 0},    {0, 2, 0, -2, -1, 0},  {0, 4, -3, 0, 0, 1},
+      {0, 3, -1, -1, 0, 1},  {0, 0, 2, 0, 0, -2},   {0, 3, -3, 1, 0, 1},   {0, 2, -4, 2, 0, 0},
+      {0, 4, -2, -2, 0, 0},  {0, 3, 1, -1, 0, -1},  {0, 5, -4, 1, 0, 0},   {0, 3, -2, -1, -1, 0},
+      {0, 3, -2, 1, 2, 0},   {0, 4, -4, 0, 0, 0},   {0, 6, -2, -2, 0, 0},  {0, 5, 0, -3, 1, 0},
+      {0, 4, -2, 0, 2, 0},   {0, 2, 2, -2, 1, 0},   {0, 0, 4, 0, 0, -2},   {0, 3, -1, 0, 0, 0},
+      {0, 3, -3, -1, 0, 1},  {0, 4, 0, -2, 2, 0},   {0, 1, -2, -1, -1, 0}, {0, 2, -1, 0, 0, -1},
+      {0, 4, -4, 2, 0, 0},   {0, 2, 1, 0, 1, -1},   {0, 3, -2, -1, 1, 0},  {0, 4, -3, 0, 1, 1},
+      {0, 2, 0, 0, 3, 0},    {0, 6, -4, 0, 0, 0}};
+  double rl[NCON] = {0}, aim[NCON] = {0}, rf[NCON] = {0};
+  int k = 0;
+  for (int ll = 0; ll < nin; ll++) {
+    // See if Doodson numbers match.
+    int kk, ii = 0;
+    for (kk = 0; kk < NT; kk++) {
+      ii = 0;
+      for (int i = 0; i < 6; i++) ii += abs(idd[kk][i] - idtin[ll][i]);
+      if (ii == 0) break;
+    }
+    // If you have a match, put line into array.
+    if (ii == 0 && k < NCON) {
+      rl[k] = ampin[ll] * cos(phin[ll] * D2R) / fabs(tamp[kk]);
+      aim[k] = ampin[ll] * sin(phin[ll] * D2R) / fabs(tamp[kk]);
+      // Now have double and imaginary parts of admittance, scaled by
+      // Cartwright- Edden amplitude. Admittance phase is whatever was used in
+      // the original expression. (Usually phase is given relative to some
+      // reference, but amplitude is in absolute units). Next get frequency.
+      double fr, pr;
+      tdfrph(time, idd[kk], &fr, &pr);
+      rf[k] = fr;
+      k++;
+    }
+  }
+  // Done going through constituents; there are k of them.
+  // Have specified admittance at a number of points. Sort these by frequency
+  // and separate diurnal and semidiurnal, recopying admittances to get them
+  // in order using Shell Sort.
+  int key[NCON];
+  shell_sort_stable(rf, key, k);
+  int nlp = 0, ndi = 0, nsd = 0;
+  double scr[NCON];  // Scratch working space.
+  for (int i = 0; i < k; i++) {
+    if (rf[i] < 0.5) nlp++;
+    if (rf[i] < 1.5 && rf[i] > 0.5) ndi++;
+    if (rf[i] < 2.5 && rf[i] > 1.5) nsd++;
+    scr[i] = rl[key[i]];
+  }
+  for (int i = 0; i < k; i++) {
+    rl[i] = scr[i];
+    scr[i] = aim[key[i]];
+  }
+  for (int i = 0; i < k; i++) aim[i] = scr[i];
+  // Now set up splines (8 cases - four species, each double and imaginary)
+  // We have to allow for the case when there are no constituent amplitudes
+  // for the long-period tides.
+  double zdr[NCON] = {0}, zdi[NCON] = {0};
+  if (nlp != 0) {
+    cubic_spline(nlp, rf, rl, zdr, scr);
+    cubic_spline(nlp, rf, aim, zdi, scr);
+  }
+  double dr[NCON] = {0}, di[NCON] = {0}, sdr[NCON] = {0}, sdi[NCON] = {0};
+  cubic_spline(ndi, &rf[nlp], &rl[nlp], dr, scr);
+  cubic_spline(ndi, &rf[nlp], &aim[nlp], di, scr);
+  cubic_spline(nsd, &rf[nlp + ndi], &rl[nlp + ndi], sdr, scr);
+  cubic_spline(nsd, &rf[nlp + ndi], &aim[nlp + ndi], sdi, scr);
+  // Evaluate all harmonics using the interpolated admittance.
+  int nout = 0;
+  for (int i = 0; i < NT; i++) {
+    if (idd[i][0] == 0 && nlp == 0) continue;
+    tdfrph(time, idd[i], &f[nout], &p[nout]);
+    int c = idd[i][0];
+    // Compute phase corrections to equilibrium tide using function eval().
+    double sf = f[nout], re, am;
+    if (c == 0) {
+      p[nout] += 180;
+      re = cubic_spline_eval(sf, nlp, rf, rl, zdr);
+      am = cubic_spline_eval(sf, nlp, rf, aim, zdi);
+    } else if (c == 1) {
+      p[nout] += 90;
+      re = cubic_spline_eval(sf, ndi, &rf[nlp], &rl[nlp], dr);
+      am = cubic_spline_eval(sf, ndi, &rf[nlp], &aim[nlp], di);
+    } else if (c == 2) {
+      re = cubic_spline_eval(sf, nsd, &rf[nlp + ndi], &rl[nlp + ndi], sdr);
+      am = cubic_spline_eval(sf, nsd, &rf[nlp + ndi], &aim[nlp + ndi], sdi);
+    } else {
+      trace(1, "admint: unexpected state c=%d\n", c);
+      continue;
+    }
+    amp[nout] = tamp[i] * sqrt(re * re + am * am);
+    p[nout] += atan2(am, re) * R2D;
+    if (p[nout] > 180) p[nout] += -360;
+    nout++;
+  }
+  return nout;
+}
+// The purpose of the subroutine is to perform sine and cosine recursion to
+// fill in data x, of length n, for nf sines and cosines with frequencies om.
+static void recurs(double *x, int n, const double *hc, int nf, const double *om, double *scr) {
+  for (int i = 0; i < nf; i++) {
+    scr[i * 3] = hc[i * 2];
+    scr[i * 3 + 1] = hc[i * 2] * cos(om[i]) - hc[i * 2 + 1] * sin(om[i]);
+    scr[i * 3 + 2] = cos(om[i]) * 2;
+  }
+  // Do recursion over data.
+  for (int i = 0; i < n; i++) {
+    x[i] = 0;
+    // Then do recursive computation for each harmonic.
+    for (int j = 0; j < nf; j++) {
+      double sc = scr[j * 3];
+      x[i] += sc;
+      scr[j * 3] = scr[j * 3 + 2] * sc - scr[j * 3 + 1];
+      scr[j * 3 + 1] = sc;
+    }
+  }
+}
+// This function applies station displacements read in the BLQ format used by
+// Scherneck and Bos for ocean loading, and outputs a time series of computed
+// tidal displacements, using an expanded set of tidal constituents, whose
+// amplitudes and phases are found by spline interpolation of the tidal
+// admittance.  A total of 342 constituent tides are included, which gives a
+// precision of about 0.1%.
+//
+// time - the epoch, in GPST.
+// samp - the sampling interval in seconds.
+// irnt - the number of samples to return.
+// tamp[NTIN][3], tph[NTIN][3] - amplitudes and phases, in standard "Scherneck" form.
+// dz[irnt], ds[irnt], dw[irnt] - the offsets, up, south, and west respectively.
+static void hardisp(const gtime_t time, double samp, int irnt, const double tamp[NTIN][3],
+                    const double tph[NTIN][3], double *dz, double *ds, double *dw) {
+  static const int idt[NTIN][6] = {{2, 0, 0, 0, 0, 0},  {2, 2, -2, 0, 0, 0}, {2, -1, 0, 1, 0, 0},
+                                   {2, 2, 0, 0, 0, 0},  {1, 1, 0, 0, 0, 0},  {1, -1, 0, 0, 0, 0},
+                                   {1, 1, -2, 0, 0, 0}, {1, -2, 0, 1, 0, 0}, {0, 2, 0, 0, 0, 0},
+                                   {0, 1, 0, -1, 0, 0}, {0, 0, 2, 0, 0, 0}};
+  // Find amplitudes and phases for all constituents, for each of the three
+  // displacements. Note that the same frequencies are returned each time.
+  //
+  // BLQ format order is vertical, horizontal EW, horizontal NS.
+  double amp[NTIN], phase[NTIN];
+  for (int i = 0; i < NTIN; i++) {
+    amp[i] = tamp[i][0];
+    phase[i] = tph[i][0];
+  }
+  double az[NT], f[NT], pz[NT];
+  admint(time, amp, idt, phase, az, f, pz, NTIN);
+
+  for (int i = 0; i < NTIN; i++) {
+    amp[i] = tamp[i][1];
+    phase[i] = tph[i][1];
+  }
+  double aw[NT], pw[NT];
+  admint(time, amp, idt, phase, aw, f, pw, NTIN);
+
+  for (int i = 0; i < NTIN; i++) {
+    amp[i] = tamp[i][2];
+    phase[i] = tph[i][2];
+  }
+  double as[NT], ps[NT];
+  int ntout = admint(time, amp, idt, phase, as, f, ps, NTIN);
+  // Set up for recursion, by normalizing frequencies, and converting phases
+  // to radians.
+  double wf[NT];
+  for (int i = 0; i < ntout; i++) {
+    pz[i] = D2R * pz[i];
+    ps[i] = D2R * ps[i];
+    pw[i] = D2R * pw[i];
+    f[i] = samp * PI * f[i] / 43200;
+    wf[i] = f[i];
+  }
+  // Loop over times, NL output points at a time. At the start of each such
+  // block, convert from amp and phase to sin and cos (hc array) at the start
+  // of the block. The computation of values within each block is done
+  // recursively, since the times are equi-spaced.
+  int irli = 1;
+  for (int j = 0;; j++) {
+    int irhi = irli + NL - 1;
+    if (irhi > irnt) irhi = irnt;
+    int np = irhi - irli + 1;
+    // Set up harmonic coefficients, compute tide.
+    double hcz[NT * 2], hcs[NT * 2], hcw[NT * 2];
+    for (int i = 0; i < NT; i++) {
+      hcz[i * 2] = az[i] * cos(pz[i]);
+      hcz[i * 2 + 1] = -az[i] * sin(pz[i]);
+      hcs[i * 2] = as[i] * cos(ps[i]);
+      hcs[i * 2 + 1] = -as[i] * sin(ps[i]);
+      hcw[i * 2] = aw[i] * cos(pw[i]);
+      hcw[i * 2 + 1] = -aw[i] * sin(pw[i]);
+    }
+    double scr[NT * 3];  // Scratch.
+    recurs(dz + j * NL, np, hcz, ntout, wf, scr);
+    recurs(ds + j * NL, np, hcs, ntout, wf, scr);
+    recurs(dw + j * NL, np, hcw, ntout, wf, scr);
+    if (irhi >= irnt) break;
+    irli = irhi + 1;
+    // Reset phases to the start of the new section.
+    for (int i = 0; i < NT; i++) {
+      pz[i] = fmod(pz[i] + np * f[i], 2 * PI);
+      ps[i] = fmod(ps[i] + np * f[i], 2 * PI);
+      pw[i] = fmod(pw[i] + np * f[i], 2 * PI);
+    }
+  }
+}
+
 /* iers mean pole (ref [7] eq.7.25) ------------------------------------------*/
 static void iers_mean_pole(gtime_t tut, double *xp_bar, double *yp_bar)
 {
@@ -483,12 +952,12 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
 *                                 8: elimate permanent deformation
 *          double *erp      I   earth rotation parameters (NULL: not used)
 *          double *odisp    I   ocean loading parameters  (NULL: not used)
-*                                 odisp[0+i*6]: consituent i amplitude radial(m)
-*                                 odisp[1+i*6]: consituent i amplitude west  (m)
-*                                 odisp[2+i*6]: consituent i amplitude south (m)
-*                                 odisp[3+i*6]: consituent i phase radial  (deg)
-*                                 odisp[4+i*6]: consituent i phase west    (deg)
-*                                 odisp[5+i*6]: consituent i phase south   (deg)
+*                                 odisp[0][i][0]: consituent i amplitude radial(m)
+*                                 odisp[0][i][1]: consituent i amplitude west  (m)
+*                                 odisp[0][i][2]: consituent i amplitude south (m)
+*                                 odisp[1][i][0]: consituent i phase radial  (deg)
+*                                 odisp[1][i][1]: consituent i phase west    (deg)
+*                                 odisp[1][i][2]: consituent i phase south   (deg)
 *                                (i=0:M2,1:S2,2:N2,3:K2,4:K1,5:O1,6:P1,7:Q1,
 *                                   8:Mf,9:Mm,10:Ssa)
 *          double *dr       O   displacement by earth tides (ecef) (m)
@@ -497,8 +966,8 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
 *          see ref [4] 5.2.1, 5.2.2, 5.2.3
 *          ver.2.4.0 does not use ocean loading and pole tide corrections
 *-----------------------------------------------------------------------------*/
-extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp, const double *odisp,
-                     double *dr) {
+extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
+                     const double odisp[2][11][3], double *dr) {
   char tstr[40];
   trace(3, "tidedisp: tutc=%s\n", time2str(tutc, tstr, 0));
 
@@ -528,11 +997,16 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp, 
     trace(5, "tidedisp solid: dr=%.3f %.3f %.3f\n", drt[0], drt[1], drt[2]);
   }
   if ((opt & 2) && odisp) {  // Ocean tide loading.
+    double dz, ds, dw;
+    hardisp(tut, 1, 1, odisp[0], odisp[1], &dz, &ds, &dw);
     double denu[3];
-    tide_oload(tut, odisp, denu);
+    denu[0] = -dw;
+    denu[1] = -ds;
+    denu[2] =  dz;
     double drt[3];
     matmul("TN", 3, 1, 3, E, denu, drt);
     for (int i = 0; i < 3; i++) dr[i] += drt[i];
+    trace(5, "tidedisp otide: dr=%.3f %.3f %.3f\n", drt[0], drt[1], drt[2]);
   }
   if ((opt & 4) && erp) {  // Pole tide.
     double denu[3];

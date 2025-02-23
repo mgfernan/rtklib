@@ -2709,17 +2709,21 @@ extern void readpos(const char *file, const char *rcv, double *pos)
     pos[0]=pos[1]=pos[2]=0.0;
 }
 /* read blq record -----------------------------------------------------------*/
-static int readblqrecord(FILE *fp, double *odisp)
+static int readblqrecord(FILE *fp, double odisp[2][11][3])
 {
-    double v[11];
     char buff[256];
-    int i,n=0;
-
+    int n = 0;
     while (fgets(buff,sizeof(buff),fp)) {
         if (!strncmp(buff,"$$",2)) continue;
+        double v[11];
         if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                    v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10)<11) continue;
-        for (i=0;i<11;i++) odisp[n+i*6]=v[i];
+        // Pack the amplitude and phase as expected by hardisp,
+        // change the sign for the phase, to be negative for lags.
+        if (n < 3)
+          for (int i = 0; i < 11; i++) odisp[0][i][n] = v[i];
+        else
+          for (int i = 0; i < 11; i++) odisp[1][i][n - 3] = -v[i];
         if (++n==6) return 1;
     }
     return 0;
@@ -2728,10 +2732,10 @@ static int readblqrecord(FILE *fp, double *odisp)
 * read blq ocean tide loading parameters
 * args   : char   *file       I   BLQ ocean tide loading parameter file
 *          char   *sta        I   station name
-*          double *odisp      O   ocean tide loading parameters
+*          double odisp[2][11][3] O   ocean tide loading parameters
 * return : status (1:ok,0:file open error)
 *-----------------------------------------------------------------------------*/
-extern int readblq(const char *file, const char *sta, double *odisp)
+extern int readblq(const char *file, const char *sta, double odisp[2][11][3])
 {
     FILE *fp;
     char buff[256],staname[17]="",name[17],*p;
