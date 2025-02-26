@@ -964,20 +964,11 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
   trace(3, "tidedisp: tutc=%s\n", time2str(tutc, tstr, 0));
 
   double erpv[5] = {0};
-  if (erp) {
-    geterp(erp, utc2gpst(tutc), erpv);
-  }
-  gtime_t tut = timeadd(tutc, erpv[2]);
+  if (erp) geterp(erp, utc2gpst(tutc), erpv);
 
   dr[0] = dr[1] = dr[2] = 0.0;
 
   if (norm(rr, 3) <= 0.0) return;
-
-  double pos[2];
-  pos[0] = asin(rr[2] / norm(rr, 3));
-  pos[1] = atan2(rr[1], rr[0]);
-  double E[9];
-  xyz2enu(pos, E);
 
   if (opt & 1) {  // Solid earth tides.
     // Sun and moon position in ECEF.
@@ -988,7 +979,14 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
     for (int i = 0; i < 3; i++) dr[i] += drt[i];
     trace(5, "tidedisp solid: dr=%.3f %.3f %.3f\n", drt[0], drt[1], drt[2]);
   }
+
+  double pos[3], E[9];
+  if (((opt & 2) && odisp) || ((opt & 4) && erp)) {
+    ecef2pos(rr, pos);
+    xyz2enu(pos, E);
+  }
   if ((opt & 2) && odisp) {  // Ocean tide loading.
+    gtime_t tut = timeadd(tutc, erpv[2]);
     double dz, ds, dw;
     hardisp(tut, 1, 1, odisp[0], odisp[1], &dz, &ds, &dw);
     double denu[3];
