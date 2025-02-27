@@ -16,6 +16,7 @@ rtkrcv     : sbas.o stream.o rcvraw.o rtcm.o preceph.o options.o pntpos.o ppp.o 
 rtkrcv     : novatel.o ublox.o crescent.o skytraq.o javad.o nvs.o binex.o
 rtkrcv     : rt17.o ephemeris.o rinex.o ionex.o rtcm2.o rtcm3.o rtcm3e.o
 rtkrcv     : tides.o septentrio.o swiftnav.o unicore.o
+rtkrcv     : sofa.o
 
 
 rtkrcv.o   : ../rtkrcv.c
@@ -90,6 +91,8 @@ septentrio.o: $(SRC)/rcv/septentrio.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/septentrio.c
 unicore.o: $(SRC)/rcv/unicore.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/unicore.c
+sofa.o     : $(SRC)/sofa.c
+	$(CC) -c $(CFLAGS) $(SRC)/sofa.c
 
 rtkrcv.o   : $(SRC)/rtklib.h ../vt.h
 vt.o       : ../vt.h

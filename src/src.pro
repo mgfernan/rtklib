@@ -66,6 +66,7 @@ SOURCES += rtkcmn.c \
     stream.c \
     streamsvr.c \
     tides.c \
+    sofa.c \
     tle.c \
     rcv/binex.c \
     rcv/crescent.c \
