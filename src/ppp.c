@@ -1213,7 +1213,7 @@ extern void pppos(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
     }
     /* earth tides correction */
     if (opt->tidecorr) {
-        tidedisp(gpst2utc(obs[0].time),rtk->x,opt->tidecorr==1?1:7,&nav->erp,
+        tidedisp(gpst2utc(obs[0].time),rtk->x,opt->tidecorr,&nav->erp,
                  opt->odisp[0],dr);
     }
     nv=n*rtk->opt.nf*2+MAXSAT+3;

@@ -1030,7 +1030,7 @@ typedef struct {        /* processing options type */
     int ionoopt;        /* ionosphere option (IONOOPT_???) */
     int tropopt;        /* troposphere option (TROPOPT_???) */
     int dynamics;       /* dynamics model (0:none,1:velocity,2:accel) */
-    int tidecorr;       /* earth tide correction (0:off,1:solid,2:solid+otl+pole) */
+    int tidecorr;       /* earth tide correction (0:off+1:solid+2:otl+4:spole) */
     int niter;          /* number of filter iteration */
     int codesmooth;     /* code smoothing window size (0:none) */
     int intpref;        /* interpolate reference obs (for post mission) */

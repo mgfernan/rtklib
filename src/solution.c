@@ -1494,10 +1494,13 @@ extern int outprcopts(uint8_t *buff, const prcopt_t *opt)
         p+=sprintf(p,"%s solution  : %s\r\n",COMMENTH,s3[opt->soltype]);
     }
     p+=sprintf(p,"%s elev mask : %.1f deg\r\n",COMMENTH,opt->elmin*R2D);
-    if (opt->mode>PMODE_SINGLE) {
+    if (opt->mode>PMODE_SINGLE)
         p+=sprintf(p,"%s dynamics  : %s\r\n",COMMENTH,opt->dynamics?"on":"off");
-        p+=sprintf(p,"%s tidecorr  : %s\r\n",COMMENTH,opt->tidecorr?"on":"off");
-    }
+    p += sprintf(p, "%s tidecorr  :", COMMENTH);
+    if (opt->tidecorr & 1) p += sprintf(p, " solid");
+    if (opt->tidecorr & 2) p += sprintf(p, " otl");
+    if (opt->tidecorr & 4) p += sprintf(p, " spole");
+    p+=sprintf(p,"\r\n");
     if (opt->mode<=PMODE_FIXED) {
         p+=sprintf(p,"%s ionos opt : %s\r\n",COMMENTH,s4[opt->ionoopt]);
     }

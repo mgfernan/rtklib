@@ -701,6 +701,7 @@ void OptDialog::updateOptions()
     processingOptions.tropopt = ui->cBTroposphereOption->currentIndex();
     processingOptions.dynamics = ui->cBDynamicModel->currentIndex();
     processingOptions.tidecorr = ui->cBTideCorrection->currentIndex();
+    if (processingOptions.tidecorr > 1) processingOptions.tidecorr = 7;
     processingOptions.niter = ui->sBNumIteration->value();
     // codesmooth
     processingOptions.intpref = ui->cBIntputReferenceObservation->currentIndex();
@@ -935,7 +936,7 @@ void OptDialog::load(const QString &file)
     ui->cBIonosphereOption->setCurrentIndex(prcopt.ionoopt);
     ui->cBTroposphereOption->setCurrentIndex(prcopt.tropopt);
     ui->cBDynamicModel->setCurrentIndex(prcopt.dynamics);
-    ui->cBTideCorrection->setCurrentIndex(prcopt.tidecorr);
+    ui->cBTideCorrection->setCurrentIndex(prcopt.tidecorr > 1 ? 2 : prcopt.tidecorr);
     ui->sBNumIteration->setValue(prcopt.niter);
     //prcopt.codesmooth
     if (options == PostOptions) {
@@ -1110,6 +1111,7 @@ void OptDialog::save(const QString &file)
     procOpts.tropopt = ui->cBTroposphereOption->currentIndex();
     procOpts.dynamics = ui->cBDynamicModel->currentIndex();
     procOpts.tidecorr = ui->cBTideCorrection->currentIndex();
+    if (procOpts.tidecorr > 1) procOpts.tidecorr = 7;
     procOpts.niter = ui->sBNumIteration->value();
     // procOpts.codesmooth
     procOpts.intpref = ui->cBIntputReferenceObservation->currentIndex();
