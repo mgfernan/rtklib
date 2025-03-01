@@ -59,6 +59,16 @@ extern "C" {
 #define EXPORT
 #endif
 
+#if (__STDC_VERSION__ >= 201710L)
+#define THREADLOCAL _Thread_local
+#elif defined(__GNUC__)
+#define THREADLOCAL __thread
+#elif defined(_MSC_VER)
+#define THREADLOCAL __declspec(__thread)
+#else
+#define THREADLOCAL
+#endif
+
 /* constants -----------------------------------------------------------------*/
 
 #define VER_RTKLIB  "demo5"             /* library version */

@@ -2379,8 +2379,8 @@ static void nut_iau1980(double t, const double *f, double *dpsi, double *deps)
 extern void eci2ecef(gtime_t tutc, const double *erpv, double *U, double *gmst)
 {
     const double ep2000[]={2000,1,1,12,0,0};
-    static gtime_t tutc_;
-    static double U_[9],gmst_;
+    static THREADLOCAL gtime_t tutc_ = {0, 0};
+    static THREADLOCAL double U_[9], gmst_;
     gtime_t tgps;
     double eps,ze,th,z,t,t2,t3,dpsi,deps,gast,f[5];
     double R1[9],R2[9],R3[9],R[9],W[9],N[9],P[9],NP[9];
