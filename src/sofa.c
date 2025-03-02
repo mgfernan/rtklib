@@ -6,8 +6,9 @@
 // compute the Sun and Moon positions: epv00.c s2pv.c obl06.c pfw06.c ir.c
 // rz.c cp.c rx.c rxp.c rxpv.c moon98.c
 //
-// Modifications: There are currently no coding modifications to these
-// functions.
+// Modifications: function arguments that are not modified are declared as
+// const. Static local variables and data that were effectively constants are
+// declared as const to make it clear that there is no thread safety issue.
 //
 // To avoid a clash between the use of the larger SOFA library and this bundle
 // in RTKLIB, the functions iauEpv00() and iauMoon98() are renamed removing
@@ -158,9 +159,9 @@ int epv00(double date1, double date2, double pvh[2][3], double pvb[2][3])
   ** These were obtained empirically, by comparisons with DE405 over
   ** 1900-2100.
   */
-  static const double am12 = 0.000000211284, am13 = -0.000000091603, am21 = -0.000000230286,
-                      am22 = 0.917482137087, am23 = -0.397776982902, am32 = 0.397776982902,
-                      am33 = 0.917482137087;
+  const double am12 = 0.000000211284, am13 = -0.000000091603, am21 = -0.000000230286,
+               am22 = 0.917482137087, am23 = -0.397776982902, am32 = 0.397776982902,
+               am33 = 0.917482137087;
 
   /*
   ** ----------------------
@@ -2179,7 +2180,8 @@ int epv00(double date1, double date2, double pvh[2][3], double pvb[2][3])
 
 // The following are in support of iauMoon98()
 
-static void iauS2pv(double theta, double phi, double r, double td, double pd, double rd, double pv[2][3])
+static void iauS2pv(double theta, double phi, double r, double td, double pd, double rd,
+                    double pv[2][3])
 /*
 **  - - - - - - - -
 **   i a u S 2 p v
@@ -2299,7 +2301,8 @@ static double iauObl06(double date1, double date2)
   return eps0;
 }
 
-static void iauPfw06(double date1, double date2, double *gamb, double *phib, double *psib, double *epsa)
+static void iauPfw06(double date1, double date2, double *gamb, double *phib, double *psib,
+                     double *epsa)
 /*
 **  - - - - - - - - -
 **   i a u P f w 0 6
@@ -2501,7 +2504,7 @@ static void iauRz(double psi, double r[3][3])
   r[1][2] = a12;
 }
 
-static void iauCp(double p[3], double c[3])
+static void iauCp(const double p[3], double c[3])
 /*
 **  - - - - - -
 **   i a u C p
@@ -2592,7 +2595,7 @@ static void iauRx(double phi, double r[3][3])
   r[2][2] = a22;
 }
 
-static void iauRxp(double r[3][3], double p[3], double rp[3])
+static void iauRxp(const double r[3][3], const double p[3], double rp[3])
 /*
 **  - - - - - - -
 **   i a u R x p
@@ -2641,7 +2644,7 @@ static void iauRxp(double r[3][3], double p[3], double rp[3])
   iauCp(wrp, rp);
 }
 
-static void iauRxpv(double r[3][3], double pv[2][3], double rpv[2][3])
+static void iauRxpv(const double r[3][3], const double pv[2][3], double rpv[2][3])
 /*
 **  - - - - - - - -
 **   i a u R x p v
@@ -2798,28 +2801,28 @@ void moon98(double date1, double date2, double pv[2][3])
   */
 
   /* Moon's mean longitude (wrt mean equinox and ecliptic of date) */
-  static double elp0 = 218.31665436, /* Simon et al. (1994). */
+  const double elp0 = 218.31665436, /* Simon et al. (1994). */
       elp1 = 481267.88123421, elp2 = -0.0015786, elp3 = 1.0 / 538841.0, elp4 = -1.0 / 65194000.0;
   double elp, delp;
 
   /* Moon's mean elongation */
-  static double d0 = 297.8501921, d1 = 445267.1114034, d2 = -0.0018819, d3 = 1.0 / 545868.0,
-                d4 = 1.0 / 113065000.0;
+  const double d0 = 297.8501921, d1 = 445267.1114034, d2 = -0.0018819, d3 = 1.0 / 545868.0,
+               d4 = 1.0 / 113065000.0;
   double d, dd;
 
   /* Sun's mean anomaly */
-  static double em0 = 357.5291092, em1 = 35999.0502909, em2 = -0.0001536, em3 = 1.0 / 24490000.0,
-                em4 = 0.0;
+  const double em0 = 357.5291092, em1 = 35999.0502909, em2 = -0.0001536, em3 = 1.0 / 24490000.0,
+               em4 = 0.0;
   double em, dem;
 
   /* Moon's mean anomaly */
-  static double emp0 = 134.9633964, emp1 = 477198.8675055, emp2 = 0.0087414, emp3 = 1.0 / 69699.0,
-                emp4 = -1.0 / 14712000.0;
+  const double emp0 = 134.9633964, emp1 = 477198.8675055, emp2 = 0.0087414, emp3 = 1.0 / 69699.0,
+               emp4 = -1.0 / 14712000.0;
   double emp, demp;
 
   /* Mean distance of the Moon from its ascending node */
-  static double f0 = 93.2720950, f1 = 483202.0175233, f2 = -0.0036539, f3 = 1.0 / 3526000.0,
-                f4 = 1.0 / 863310000.0;
+  const double f0 = 93.2720950, f1 = 483202.0175233, f2 = -0.0036539, f3 = 1.0 / 3526000.0,
+               f4 = 1.0 / 863310000.0;
   double f, df;
 
   /*
@@ -2827,27 +2830,27 @@ void moon98(double date1, double date2, double pv[2][3])
   */
 
   /* Meeus A_1, due to Venus (deg) */
-  static double a10 = 119.75, a11 = 131.849;
+  const double a10 = 119.75, a11 = 131.849;
   double a1, da1;
 
   /* Meeus A_2, due to Jupiter (deg) */
-  static double a20 = 53.09, a21 = 479264.290;
+  const double a20 = 53.09, a21 = 479264.290;
   double a2, da2;
 
   /* Meeus A_3, due to sidereal motion of the Moon in longitude (deg) */
-  static double a30 = 313.45, a31 = 481266.484;
+  const double a30 = 313.45, a31 = 481266.484;
   double a3, da3;
 
   /* Coefficients for Meeus "additive terms" (deg) */
-  static double al1 = 0.003958, al2 = 0.001962, al3 = 0.000318;
-  static double ab1 = -0.002235, ab2 = 0.000382, ab3 = 0.000175, ab4 = 0.000175, ab5 = 0.000127,
-                ab6 = -0.000115;
+  const double al1 = 0.003958, al2 = 0.001962, al3 = 0.000318;
+  const double ab1 = -0.002235, ab2 = 0.000382, ab3 = 0.000175, ab4 = 0.000175, ab5 = 0.000127,
+               ab6 = -0.000115;
 
   /* Fixed term in distance (m) */
-  static double r0 = 385000560.0;
+  const double r0 = 385000560.0;
 
   /* Coefficients for (dimensionless) E factor */
-  static double e1 = -0.002516, e2 = -0.0000074;
+  const double e1 = -0.002516, e2 = -0.0000074;
   double e, de, esq, desq;
 
   /*
@@ -2862,7 +2865,7 @@ void moon98(double date1, double date2, double pv[2][3])
     double coefr; /* coefficient of R cosine argument (m) */
   };
 
-  static struct termlr tlr[] = {
+  static const struct termlr tlr[] = {
       {0, 0, 1, 0, 6.288774, -20905355.0}, {2, 0, -1, 0, 1.274027, -3699111.0},
       {2, 0, 0, 0, 0.658314, -2955968.0},  {0, 0, 2, 0, 0.213618, -569925.0},
       {0, 1, 0, 0, -0.185116, 48888.0},    {0, 0, 0, 2, -0.114332, -3149.0},
@@ -2894,7 +2897,7 @@ void moon98(double date1, double date2, double pv[2][3])
       {0, 2, 1, 0, -0.000323, 1165.0},     {1, 1, -1, 0, 0.000299, 0.0},
       {2, 0, 3, 0, 0.000294, 0.0},         {2, 0, -1, -2, 0.000000, 8752.0}};
 
-  static int NLR = (sizeof tlr / sizeof(struct termlr));
+  const int NLR = (sizeof tlr / sizeof(struct termlr));
 
   /*
   ** Coefficients for Moon latitude series
@@ -2907,7 +2910,7 @@ void moon98(double date1, double date2, double pv[2][3])
     double coefb; /* coefficient of B sine argument (deg) */
   };
 
-  static struct termb tb[] = {
+  static const struct termb tb[] = {
       {0, 0, 0, 1, 5.128122},    {0, 0, 1, 1, 0.280602},    {0, 0, 1, -1, 0.277693},
       {2, 0, 0, -1, 0.173237},   {2, 0, -1, 1, 0.055413},   {2, 0, -1, -1, 0.046271},
       {2, 0, 0, 1, 0.032573},    {0, 0, 2, 1, 0.017198},    {2, 0, 1, -1, 0.009266},
@@ -2929,7 +2932,7 @@ void moon98(double date1, double date2, double pv[2][3])
       {4, -1, -1, -1, 0.000166}, {1, 0, 1, -1, -0.000164},  {4, 0, 1, -1, 0.000132},
       {1, 0, -1, -1, -0.000119}, {4, -1, 0, -1, 0.000115},  {2, -2, 0, 1, 0.000107}};
 
-  static int NB = (sizeof tb / sizeof(struct termb));
+  const int NB = (sizeof tb / sizeof(struct termb));
 
   /* Miscellaneous */
   int n, i;
