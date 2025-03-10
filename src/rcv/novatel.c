@@ -221,7 +221,7 @@ static int sig2code(int sys, int sigtype)
     }
     else if (sys==SYS_GAL) {
         switch (sigtype) {
-            case  1: return CODE_L1B; /* E1B  (Bynav M2) */
+            case  1: return CODE_L1C; /* E1BC (Bynav M2) */
             case  2: return CODE_L1C; /* E1C  (OEM6) */
             case  6: return CODE_L6B; /* E6B  (OEM7) */
             case  7: return CODE_L6C; /* E6C  (OEM7) */
