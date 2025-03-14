@@ -83,3 +83,5 @@ app/qtapp/packaging/packages/RtkLibInstaller.exe
 
 .vscode
 build
+
+tmp
