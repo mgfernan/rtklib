@@ -79,3 +79,6 @@ app/qtapp/packaging/packages/**.exe
 app/qtapp/packaging/packages/*/data
 app/qtapp/packaging/packages/com.rtklib/meta/license.txt
 app/qtapp/packaging/packages/RtkLibInstaller.exe
+
+.vscode
+build
