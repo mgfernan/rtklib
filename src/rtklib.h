@@ -419,6 +419,7 @@ extern "C" {
 #define IONOOPT_EST 4                   /* ionosphere option: estimation */
 #define IONOOPT_TEC 5                   /* ionosphere option: IONEX TEC model */
 #define IONOOPT_QZS 6                   /* ionosphere option: QZSS broadcast model */
+#define IONOOPT_GAL 7                   /* ionosphere option: Galileo Broadcast model */
 
 #define TROPOPT_OFF 0                   /* troposphere option: correction off */
 #define TROPOPT_SAAS 1                  /* troposphere option: Saastamoinen model */
@@ -1557,6 +1558,9 @@ EXPORT int ionocorr(gtime_t time, const nav_t *nav, int sat, const double *pos,
 EXPORT int tropcorr(gtime_t time, const nav_t *nav, const double *pos,
                     const double *azel, int tropopt, double *trp, double *var);
 EXPORT int seliflc(int optnf, int sys);
+EXPORT int galioncorr(gtime_t time, const double iono_gal_coeffs[], const double *pos,
+                      const double *azel, double *ion, double *var);
+
 
 /* antenna models ------------------------------------------------------------*/
 EXPORT int  readpcv(const char *file, pcvs_t *pcvs);
