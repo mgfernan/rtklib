@@ -3,12 +3,7 @@
 #include "NeQuickG_JRC.h"
 
 
-// Function to compute satellite position from observer position, azimuth, and elevation
-static void compute_sat_pos_from_az_el(const double pos[3], double az, double el, double sat_pos[3]) {
-    // pos: [latitude (rad), longitude (rad), height (m)]
-    // az: azimuth (rad)
-    // el: elevation (rad)
-    // sat_pos: [latitude (rad), longitude (rad), height (m)]
+extern void compute_sat_pos_from_az_el(const double pos[3], double az, double el, double sat_pos[3]) {
 
     static const double EARTH_RADIUS = 6378137.0;
     static const double SAT_RADIUS = 25000000.0; // Assume a large satellite height for now, you may need to adjust or calculate it based on other info.
@@ -39,10 +34,13 @@ static void compute_sat_pos_from_az_el(const double pos[3], double az, double el
     };
 
     // Calculate vector from observer to satellite in local tangent plane
+    double B = PI/2 + el;
+    double h_sta = EARTH_RADIUS + pos[2];
+    double range = h_sta*cos(B) + sqrt(SAT_RADIUS*SAT_RADIUS - h_sta*h_sta*sin(B)*sin(B));
     double local_vector[3] = {
-        SAT_RADIUS * cos_el * sin_az,
-        SAT_RADIUS * cos_el * cos_az,
-        SAT_RADIUS * sin_el
+        range * cos_el * sin_az,
+        range * cos_el * cos_az,
+        range * sin_el
     };
 
     // Rotate local vector to ECEF
