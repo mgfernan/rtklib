@@ -60,7 +60,7 @@ tle.o      : $(SRC)/rtklib.h $(SRC)/tle.c
 tides.o   : $(SRC)/rtklib.h $(SRC)/tides.c
 	$(CC) -c $(CFLAGS) $(SRC)/tides.c
 galileo.o   : $(SRC)/rtklib.h $(SRC)/galileo.c
-	$(CC) -c $(CFLAGS) -I$(SRC)/../submodules/NeQuickJRC/src/lib/public $(SRC)/galileo.c
+	$(CC) -c $(CFLAGS) -DFTR_MODIP_CCIR_AS_CONSTANTS -I$(SRC)/../submodules/NeQuickJRC/src/lib/public $(SRC)/galileo.c
 
 utest : utest1 utest2 utest3 utest4 utest5 utest6 utest7 utest8
 utest : utest9 utest10 utest11 utest12 utest14 utest15
