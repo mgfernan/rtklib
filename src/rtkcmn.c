@@ -3519,13 +3519,14 @@ extern double geodist(const double *rs, const double *rr, double *e)
 *-----------------------------------------------------------------------------*/
 extern double satazel(const double *pos, const double *e, double *azel)
 {
-    double az=0.0,el=PI/2.0,enu[3];
+    double az=0.0,el=PI/2.0,up,enu[3];
 
     if (pos[2]>-RE_WGS84) {
         ecef2enu(pos,e,enu);
         az=dot2(enu,enu)<1E-12?0.0:atan2(enu[0],enu[1]);
         if (az<0.0) az+=2*PI;
-        el=asin(enu[2]);
+        up = enu[2] < -1.0 ? -1.0 : (enu[2] > 1.0 ? 1.0 : enu[2]);
+        el=asin(up);
     }
     if (azel) {azel[0]=az; azel[1]=el;}
     return el;
