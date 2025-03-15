@@ -72,15 +72,18 @@ extern void compute_sat_pos_from_az_el(const double pos[3], double az, double el
  * \return 0 upon error, 1 if OK (following RTKLIB convention)
  */
 extern int galioncorr(gtime_t time, const double iono_gal_coeffs[], const double *pos,
-                      const double *azel, double *ion, double *var) {
+                      const double *azel, double *delay_l1, double *var) {
 
     double tec_tecu;
     double epoch[6];
     uint8_t month;
     double UTC;
     double sat_pos[3];  // latitude (rad), longitude (rad), height (m)
+    double std_iono;
     int res = 0;
     static NeQuickG_handle nequick_handle = NEQUICKG_INVALID_HANDLE;
+    static const double L1_FREQ_HZ = 1575.42e6;
+    static const double ALPHA_ION = 40.3e16 / (L1_FREQ_HZ * L1_FREQ_HZ);  // m/TECU
 
     if (nequick_handle == NULL) {
         /* first time setup of the NeQuick handle */
@@ -102,17 +105,25 @@ extern int galioncorr(gtime_t time, const double iono_gal_coeffs[], const double
     if (NeQuickG.set_time(nequick_handle, month, UTC) != NEQUICK_OK) {
         goto exit;
     }
-    if (NeQuickG.set_receiver_position(nequick_handle, pos[1], pos[0], pos[2]) != NEQUICK_OK) {
+    if (NeQuickG.set_receiver_position(nequick_handle, pos[1] * R2D, pos[0] * R2D, pos[2]) != NEQUICK_OK) {
         goto exit;
     }
-    if (NeQuickG.set_satellite_position(nequick_handle, sat_pos[1], sat_pos[0], sat_pos[2]) != NEQUICK_OK) {
+    if (NeQuickG.set_satellite_position(nequick_handle, sat_pos[1] * R2D, sat_pos[0] * R2D, sat_pos[2]) != NEQUICK_OK) {
         goto exit;
     }
     if (NeQuickG.get_total_electron_content(nequick_handle, &tec_tecu) != NEQUICK_OK) {
         goto exit;
     }
 
-    *var=(*ion*0.5) * (*ion*0.5); // Variance of the ionospheric delay
+    *delay_l1 = tec_tecu * ALPHA_ION;
+    std_iono = 0.5 * (*delay_l1);  // Assume 50% std deviation of the ionospheric delay
+    *var= std_iono * std_iono;
+
+    trace(5,"galioncorr: pos=%.3f %.3f azel=%.3f %.3f coeffs=%.3e %.3e %.3e stec=%.3f delay_l1=%7.2f std=%7.2f\n",
+        pos[0]*R2D,pos[1]*R2D,
+        azel[0]*R2D,azel[1]*R2D,
+        iono_gal_coeffs[0], iono_gal_coeffs[1], iono_gal_coeffs[2],
+        tec_tecu, *delay_l1, std_iono);
 
     res = 1;
 exit:

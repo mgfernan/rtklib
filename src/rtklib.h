@@ -1559,7 +1559,7 @@ EXPORT int tropcorr(gtime_t time, const nav_t *nav, const double *pos,
                     const double *azel, int tropopt, double *trp, double *var);
 EXPORT int seliflc(int optnf, int sys);
 EXPORT int galioncorr(gtime_t time, const double iono_gal_coeffs[], const double *pos,
-                      const double *azel, double *ion, double *var);
+                      const double *azel, double *delay_l1, double *var);
 
 
 /* antenna models ------------------------------------------------------------*/
