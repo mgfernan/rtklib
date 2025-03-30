@@ -541,7 +541,7 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.elmin     =str2dbl(ElMask ->Text)*D2R;
 	PrcOpt.dynamics  =DynamicModel->ItemIndex;
 	PrcOpt.tidecorr  =TideCorr    ->ItemIndex;
-	if (PrcOpt.tidecorr > 1) PrcOpt.tidecorr == 7;
+	if (PrcOpt.tidecorr > 1) PrcOpt.tidecorr = 7;
 	PrcOpt.ionoopt   =IonoOpt     ->ItemIndex;
 	PrcOpt.tropopt   =TropOpt     ->ItemIndex;
 	PrcOpt.sateph    =SatEphem    ->ItemIndex;
