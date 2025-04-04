@@ -35,6 +35,9 @@ add_definitions(-DFTR_MODIP_CCIR_AS_CONSTANTS)  # Make compilation with preloade
 
 message(STATUS "Submodule Variable: [ ${NEQUICK_LIB_NAME} ]")
 
+# 3rd party libs
+add_subdirectory(lib)
+
 # rtklib library
 add_subdirectory(src)
 
