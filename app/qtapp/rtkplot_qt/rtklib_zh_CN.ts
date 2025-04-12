@@ -14,6 +14,7 @@
 Copyright (C) 2016-2025 Jens Reimann</source>
         <translation>Qt 版本
 版权所有 (C) 2016-2025 Jens Reimann
+汉化
 版权所有 (C) 2016-2025 刘胜(Sheng Liu)</translation>
     </message>
     <message>
