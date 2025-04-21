@@ -3920,7 +3920,7 @@ static void sunpos_eci(gtime_t tutc, const double *erpv, double *rsun) {
   char tstr[40];
   trace(4, "sunpos_eci: tutc=%s\n", time2str(tutc, tstr, 3));
 
-#ifndef SUNPOS_ORIG
+#ifdef SUNPOS_SOFA  /* use high accuracy functions in sofa.c */
   static THREADLOCAL gtime_t tutc_ = {0, 0};
   static THREADLOCAL double rsun_[3];
 
@@ -3971,7 +3971,7 @@ static void moonpos_eci(gtime_t tutc, const double *erpv, double *rmoon) {
   char tstr[40];
   trace(4, "moonpos_eci: tutc=%s\n", time2str(tutc, tstr, 3));
 
-#ifndef MOONPOS_ORIG
+#ifdef MOONPOS_SOFA   /* use high accuracy functions in sofa.c */
   static THREADLOCAL gtime_t tutc_ = {0, 0};
   static THREADLOCAL double rmoon_[3];
 
