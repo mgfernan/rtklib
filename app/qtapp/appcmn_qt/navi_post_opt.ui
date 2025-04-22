@@ -682,7 +682,7 @@
        <item row="0" column="1">
         <widget class="QComboBox" name="cBAmbiguityResolution">
          <property name="toolTip">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Define integer ambiguity resolution strategy for GPS (option &lt;span style=&quot; font-style:italic;&quot;&gt;pos2-armode&lt;/span&gt;)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Define integer ambiguity resolution strategy (option &lt;span style=&quot; font-style:italic;&quot;&gt;pos2-armode&lt;/span&gt;)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
          <item>
           <property name="text">
@@ -751,7 +751,7 @@
        <item row="0" column="0">
         <widget class="QLabel" name="Label25">
          <property name="text">
-          <string>Integer Ambiguity Res (GPS/GLO/BDS)</string>
+          <string>Integer Ambiguity Res (All/GLO/BDS)</string>
          </property>
          <property name="buddy">
           <cstring>cBAmbiguityResolution</cstring>
