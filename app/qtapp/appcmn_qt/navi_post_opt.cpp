@@ -82,7 +82,6 @@ OptDialog::OptDialog(QWidget *parent, int opts)
     ui->cBTroposphereOption->setItemData(TROPOPT_SBAS, tr("Apply SBAS tropospheric model (MOPS)"), Qt::ToolTipRole);
     ui->cBTroposphereOption->setItemData(TROPOPT_EST, tr("Estimate ZTD (zenith total delay) parameters as EKF states"), Qt::ToolTipRole);
     ui->cBTroposphereOption->setItemData(TROPOPT_ESTG, tr("ZTD and horizontal gradient parameters as EKF states"), Qt::ToolTipRole);
-    ui->cBTroposphereOption->setItemData(TROPOPT_ESTG, tr("ZTD and horizontal gradient parameters as EKF states"), Qt::ToolTipRole);
 
     ui->cBSatelliteEphemeris->setItemData(EPHOPT_BRDC, tr("Use broadcast ephemeris"), Qt::ToolTipRole);
     ui->cBSatelliteEphemeris->setItemData(EPHOPT_PREC, tr("Use precise ephemeris"), Qt::ToolTipRole);
