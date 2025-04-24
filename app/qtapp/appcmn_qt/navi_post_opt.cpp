@@ -1695,7 +1695,8 @@ void OptDialog::updateEnable()
     if (options == NaviOptions)
         setComboBoxItemEnabled(ui->cBTideCorrection, 2, false);  // OTL option is not available in RtkNavi
 
-    setComboBoxItemEnabled(ui->cBIonosphereOption, IONOOPT_EST, rel);
+    setComboBoxItemEnabled(ui->cBIonosphereOption, IONOOPT_IFLC, (rel || ppp) && ui->cBFrequencies->currentIndex()!=0);
+    setComboBoxItemEnabled(ui->cBIonosphereOption, IONOOPT_EST,  (rel || ppp) && ui->cBFrequencies->currentIndex()!=0);
     setComboBoxItemEnabled(ui->cBTroposphereOption, TROPOPT_EST, ui->cBPositionMode->currentIndex() != PMODE_SINGLE);
     setComboBoxItemEnabled(ui->cBTroposphereOption, TROPOPT_ESTG, ui->cBPositionMode->currentIndex() != PMODE_SINGLE);
     setComboBoxItemEnabled(ui->cBSatelliteEphemeris, EPHOPT_PREC, options != NaviOptions);
