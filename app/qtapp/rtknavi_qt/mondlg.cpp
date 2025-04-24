@@ -417,7 +417,7 @@ void MonitorDialog::showRtk()
     char file[1024] = "";
     const QString ionoopt[] = {tr("OFF"), tr("Broadcast"), tr("SBAS"), tr("Dual-Frequency"), tr("Estimate STEC"), tr("IONEX TEC"), tr("QZSS LEX")};
     const QString tropopt[] = {tr("OFF"), tr("Saastamoinen"), tr("SBAS"), tr("Estimate ZTD"), tr("Estimate ZTD+Grad")};
-    const QString ephopt [] = {tr("Broadcast"), tr("Precise"), tr("Broadcast+SBAS"), tr("Broadcat+SSR APC"), tr("Broadcast+SSR CoM"), tr("QZSS LEX")};
+    const QString ephopt [] = {tr("Broadcast"), tr("Precise"), tr("Broadcast+SBAS"), tr("Broadcast+SSR APC"), tr("Broadcast+SSR CoM"), tr("QZSS LEX")};
 
     rtksvrlock(rtksvr); // lock
 
