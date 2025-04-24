@@ -540,7 +540,12 @@ extern int satexclude(int sat, double var, int svh, const prcopt_t *opt)
         if (!(sys&opt->navsys)) return 1; /* unselected sat sys */
     }
     if (sys==SYS_QZS) svh&=0xFE; /* mask QZSS LEX health */
-    if (svh) {
+    if (sys == SYS_GLO) {
+      if ((svh & 9) != 0 || (svh & 6) == 4) {
+        trace(3,"unhealthy GLO satellite: sat=%3d svh=%02X\n",sat,svh);
+        return 1;
+      }
+    } else if (svh) {
         trace(3,"unhealthy satellite: sat=%3d svh=%02X\n",sat,svh);
         return 1;
     }
@@ -3141,10 +3146,10 @@ extern int readnav(const char *file, nav_t *nav)
             nav->geph[prn-1]=geph0;
             nav->geph[prn-1].sat=sat;
             toe_time=tof_time=0;
-            (void)sscanf(p+1,"%d,%d,%d,%d,%d,%ld,%ld,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,"
+            (void)sscanf(p+1,"%d,%d,%d,%d,%d,%d,%ld,%ld,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,"
                         "%lf,%lf,%lf,%lf",
                    &nav->geph[prn-1].iode,&nav->geph[prn-1].frq,&nav->geph[prn-1].svh,
-                   &nav->geph[prn-1].sva,&nav->geph[prn-1].age,
+                   &nav->geph[prn-1].flags,&nav->geph[prn-1].sva,&nav->geph[prn-1].age,
                    &toe_time,&tof_time,
                    &nav->geph[prn-1].pos[0],&nav->geph[prn-1].pos[1],&nav->geph[prn-1].pos[2],
                    &nav->geph[prn-1].vel[0],&nav->geph[prn-1].vel[1],&nav->geph[prn-1].vel[2],
@@ -3207,9 +3212,10 @@ extern int savenav(const char *file, const nav_t *nav)
     for (i=0;i<MAXPRNGLO;i++) {
         if (nav->geph[i].tof.time==0) continue;
         satno2id(nav->geph[i].sat,id);
-        fprintf(fp,"%s,%d,%d,%d,%d,%d,%d,%d,%.14E,%.14E,%.14E,%.14E,%.14E,%.14E,"
+        fprintf(fp,"%s,%d,%d,%d,%d,%d,%d,%d,%d,%.14E,%.14E,%.14E,%.14E,%.14E,%.14E,"
                    "%.14E,%.14E,%.14E,%.14E,%.14E,%.14E\n",
                 id,nav->geph[i].iode,nav->geph[i].frq,nav->geph[i].svh,
+                nav->geph[i].flags,
                 nav->geph[i].sva,nav->geph[i].age,(int)nav->geph[i].toe.time,
                 (int)nav->geph[i].tof.time,
                 nav->geph[i].pos[0],nav->geph[i].pos[1],nav->geph[i].pos[2],
