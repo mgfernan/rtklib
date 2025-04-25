@@ -792,9 +792,6 @@
          <property name="toolTip">
           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Minimum ambiguities required for fix (option: &lt;span style=&quot; font-style:italic;&quot;&gt;pos2-minfixsats&lt;/span&gt;).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
-         <property name="suffix">
-          <string> epochs</string>
-         </property>
         </widget>
        </item>
        <item row="16" column="1">
@@ -1086,9 +1083,6 @@
         <widget class="QSpinBox" name="sBMinHoldSats">
          <property name="toolTip">
           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Minimum ambiguities required for hold (option: &lt;span style=&quot; font-style:italic;&quot;&gt;pos2-minholdsats&lt;/span&gt;).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="suffix">
-          <string> epochs</string>
          </property>
         </widget>
        </item>
