@@ -1142,7 +1142,7 @@ void __fastcall TPlot::DrawObsEphem(double *yp)
             for (k=0;k<3;k++) ps[k].y+=MarkSize+2+off[Nav.seph[j].sat-1];
             ps[0].y-=2;
             
-            svh=Nav.seph[j].svh
+            svh=Nav.seph[j].svh;
             GraphR->DrawPoly(ps,3,svh?MColor[0][5]:CColor[1],0);
             
             if (in) GraphR->DrawMark(ps[2],0,Nav.seph[j].svh?MColor[0][5]:CColor[1],
