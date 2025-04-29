@@ -534,7 +534,7 @@ object FreqDialog: TFreqDialog
       Height = 22
       Align = alRight
       BevelOuter = bvNone
-      Caption = '-'
+      Caption = 'L1'
       Color = clWhite
       ParentBackground = False
       TabOrder = 4
