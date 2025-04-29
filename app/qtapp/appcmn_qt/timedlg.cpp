@@ -27,10 +27,10 @@ void TimeDialog::setTime(const gtime_t &time)
 
     utc = gpst2utc(time);
 
-    qtime_gpst = QDateTime::fromSecsSinceEpoch(time.time, QTimeZone(0));
+    qtime_gpst = QDateTime::fromSecsSinceEpoch(time.time, Qt::UTC);
     qtime_gpst = qtime_gpst.addMSecs(time.sec * 1000);
 
-    qtime_utc = QDateTime::fromSecsSinceEpoch(utc.time, QTimeZone(0));
+    qtime_utc = QDateTime::fromSecsSinceEpoch(utc.time, Qt::UTC);
     qtime_utc = qtime_utc.addMSecs(utc.sec * 1000);
 
     tow = time2gpst(time, &week);
