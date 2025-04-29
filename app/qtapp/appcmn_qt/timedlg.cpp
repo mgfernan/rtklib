@@ -24,7 +24,7 @@ void TimeDialog::setTime(const gtime_t &time)
     gtime_t utc;
     double tow, doy;
     int week;
-
+    char t_utc[40],t_gpst[40];
     utc = gpst2utc(time);
 
     qtime_gpst = QDateTime::fromSecsSinceEpoch(time.time, Qt::UTC);
@@ -36,8 +36,8 @@ void TimeDialog::setTime(const gtime_t &time)
     tow = time2gpst(time, &week);
     doy = time2doy(time);
 
-    msg += QString(tr("GPST: %1\n")).arg(QLocale().toString(qtime_gpst, QLocale::ShortFormat));
-    msg += QString(tr("UTC: %1\n\n")).arg(QLocale().toString(qtime_utc, QLocale::ShortFormat));
+    msg += QString(tr("GPST: %1\n")).arg(qtime_gpst.toString("yyyy/MM/dd hh:mm:ss"));
+    msg += QString(tr("UTC : %1\n\n")).arg(qtime_utc.toString("yyyy/MM/dd hh:mm:ss"));
     msg += QString(tr("GPS Week: %L1\n")).arg(week);
     msg += QString(tr("GPS Time: %L1 s\n")).arg(tow, 0, 'f', 0);
     msg += QString(tr("Day of Year: %L1\n")).arg((int)floor(doy), 3, 10, QChar('0'));
