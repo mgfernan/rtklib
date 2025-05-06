@@ -140,6 +140,7 @@ EXPORT opt_t sysopts[]={
     {"stats-eratio1",   1,  (void *)&prcopt_.eratio[0],  ""     },
     {"stats-eratio2",   1,  (void *)&prcopt_.eratio[1],  ""     },
     {"stats-eratio5",   1,  (void *)&prcopt_.eratio[2],  ""     },
+    {"stats-eratio6",   1,  (void *)&prcopt_.eratio[3],  ""     },
     {"stats-errphase",  1,  (void *)&prcopt_.err[1],     "m"    },
     {"stats-errphaseel",1,  (void *)&prcopt_.err[2],     "m"    },
     {"stats-errphasebl",1,  (void *)&prcopt_.err[3],     "m/10km"},
