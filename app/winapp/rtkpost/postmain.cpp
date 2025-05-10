@@ -1216,7 +1216,7 @@ void __fastcall TMainForm::LoadOpt(void)
     OutputFile->Items  =ReadList(ini,"hist","outputfile");
     
     PosMode            =ini->ReadInteger("opt","posmode",        2);
-    Freq               =ini->ReadInteger("opt","freq",           1);
+    Freq               =ini->ReadInteger("opt","freq",           2);
     Solution           =ini->ReadInteger("opt","solution",       0);
     ElMask             =ini->ReadFloat  ("opt","elmask",      15.0);
     SnrMask.ena[0]     =ini->ReadInteger("opt","snrmask_ena1",   0);
@@ -1232,7 +1232,7 @@ void __fastcall TMainForm::LoadOpt(void)
     TideCorr           =ini->ReadInteger("opt","tidecorr",       0);
     SatEphem           =ini->ReadInteger("opt","satephem",       0);
     ExSats             =ini->ReadString ("opt","exsats",        "");
-    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS|SYS_GLO|SYS_GAL);
+    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS|SYS_GLO|SYS_GAL|SYS_CMP);
     PosOpt[0]          =ini->ReadInteger("opt","posopt1",        0);
     PosOpt[1]          =ini->ReadInteger("opt","posopt2",        0);
     PosOpt[2]          =ini->ReadInteger("opt","posopt3",        0);
@@ -1243,7 +1243,7 @@ void __fastcall TMainForm::LoadOpt(void)
     
     AmbRes             =ini->ReadInteger("opt","ambres",         3);
     GloAmbRes          =ini->ReadInteger("opt","gloambres",      3);
-    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      0);
+    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      1);
     ValidThresAR       =ini->ReadFloat  ("opt","validthresar", 3.0);
     MaxPosVarAR        =ini->ReadFloat  ("opt","maxposvarar", 0.10);
     GloHwBias          =ini->ReadFloat  ("opt","glohwbias",   0.00);
