@@ -2449,7 +2449,7 @@ void __fastcall TMainForm::LoadOpt(void)
     PrcOpt.snrmask.ena[1]=ini->ReadInteger("prcopt","snrmask_ena2",0);
     for (i=0;i<NFREQ;i++) for (j=0;j<9;j++) {
         PrcOpt.snrmask.mask[i][j]=
-            ini->ReadFloat("prcopt",s.sprintf("snrmask_%d_%d",i+1,j+1),0.0);
+            ini->ReadFloat("prcopt",s.sprintf("snrmask_%d_%d",i+1,j+1),35.0);
     }
     PrcOpt.dynamics =ini->ReadInteger("prcopt", "dynamics",        1);
     PrcOpt.tidecorr =ini->ReadInteger("prcopt", "tidecorr",        0);

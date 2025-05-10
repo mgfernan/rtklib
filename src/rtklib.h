@@ -1019,7 +1019,7 @@ typedef struct {        /* option type */
 
 typedef struct {        /* SNR mask type */
     int ena[2];         /* enable flag {rover,base} */
-    double mask[NFREQ][9]; /* mask (dBHz) at 5,10,...85 deg */
+    double mask[MAXFREQ][9]; /* mask (dBHz) at 5,10,...85 deg */
 } snrmask_t;
 
 typedef struct {        /* processing options type */

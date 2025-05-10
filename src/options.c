@@ -74,6 +74,7 @@ EXPORT opt_t sysopts[]={
     {"pos1-snrmask_L1", 2,  (void *)snrmask_[0],         ""     },
     {"pos1-snrmask_L2", 2,  (void *)snrmask_[1],         ""     },
     {"pos1-snrmask_L5", 2,  (void *)snrmask_[2],         ""     },
+    {"pos1-snrmask_L6", 2,  (void *)snrmask_[3],         ""     },
     {"pos1-dynamics",   3,  (void *)&prcopt_.dynamics,   SWTOPT },
     {"pos1-tidecorr",   0,  (void *)&prcopt_.tidecorr,   TIDEOPT},
     {"pos1-ionoopt",    3,  (void *)&prcopt_.ionoopt,    IONOPT },

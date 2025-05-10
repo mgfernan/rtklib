@@ -1221,9 +1221,9 @@ void __fastcall TMainForm::LoadOpt(void)
     ElMask             =ini->ReadFloat  ("opt","elmask",      15.0);
     SnrMask.ena[0]     =ini->ReadInteger("opt","snrmask_ena1",   0);
     SnrMask.ena[1]     =ini->ReadInteger("opt","snrmask_ena2",   0);
-    for (int i=0;i<3;i++) for (int j=0;j<9;j++) {
+    for (int i=0;i<NFREQ;i++) for (int j=0;j<9;j++) {
         SnrMask.mask[i][j]=
-            ini->ReadFloat("opt",s.sprintf("snrmask_%d_%d",i+1,j+1),0.0);
+            ini->ReadFloat("opt",s.sprintf("snrmask_%d_%d",i+1,j+1),35.0);
     }
     IonoOpt            =ini->ReadInteger("opt","ionoopt",     IONOOPT_BRDC);
     TropOpt            =ini->ReadInteger("opt","tropopt",     TROPOPT_SAAS);
@@ -1446,7 +1446,7 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteFloat  ("opt","elmask",      ElMask      );
     ini->WriteInteger("opt","snrmask_ena1",SnrMask.ena[0]);
     ini->WriteInteger("opt","snrmask_ena2",SnrMask.ena[1]);
-    for (int i=0;i<3;i++) for (int j=0;j<9;j++) {
+    for (int i=0;i<NFREQ;i++) for (int j=0;j<9;j++) {
         ini->WriteFloat("opt",s.sprintf("snrmask_%d_%d",i+1,j+1),
                         SnrMask.mask[i][j]);
     }
