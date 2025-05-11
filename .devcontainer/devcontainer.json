@@ -36,7 +36,8 @@
         "vadimcn.vscode-lldb",
         "eamodio.gitlens",
         "mhutchie.git-graph",
-        "ms-vscode.cpptools-extension-pack"
+        "ms-vscode.cpptools-extension-pack",
+        "ms-python.python"
     ]
 
     // Use 'forwardPorts' to make a list of ports inside the container available locally.
