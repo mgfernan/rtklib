@@ -38,6 +38,9 @@ message(STATUS "Submodule Variable: [ ${NEQUICK_LIB_NAME} ]")
 # 3rd party libs
 add_subdirectory(lib)
 
+# 3rd party libs
+add_subdirectory(lib)
+
 # rtklib library
 add_subdirectory(src)
 
