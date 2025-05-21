@@ -1558,6 +1558,15 @@ extern void matprint(const double A[], int n, int m, int p, int q)
 {
     matfprint(A,n,m,p,q,stdout);
 }
+/* set string without tail space ---------------------------------------------*/
+extern void setstr(char *dst, const char *src, int n)
+{
+    char *p=dst;
+    const char *q=src;
+    while (*q&&q<src+n) *p++=*q++;
+    *p--='\0';
+    while (p>=dst&&(*p==' '||*p=='\r'||*p=='\n'||*p=='\t')) *p--='\0';
+}
 /* string to number ------------------------------------------------------------
 * convert substring in string to number
 * args   : char   *s        I   string ("... nnn.nnn ...")
@@ -2494,7 +2503,7 @@ static int readngspcv(const char *file, pcvs_t *pcvs)
         if (buff[0]!=' ') n=0; /* start line */
         if (++n==1) {
             pcv=pcv0;
-            strncpy(pcv.type,buff,61); pcv.type[61]='\0';
+            setstr(pcv.type,buff,61);
         }
         else if (n==2) {
             if (decodef(buff,3,neu)<3) continue;
@@ -2551,9 +2560,9 @@ static int readantex(const char *file, pcvs_t *pcvs)
         if (!state) continue;
 
         if (strstr(buff+60,"TYPE / SERIAL NO")) {
-            strncpy(pcv.type,buff   ,20); pcv.type[20]='\0';
-            strncpy(pcv.code,buff+20,20); pcv.code[20]='\0';
-            if (!strncmp(pcv.code+3,"        ",8)) {
+            setstr(pcv.type,buff,20);
+            setstr(pcv.code,buff+20,20);
+            if (strlen(pcv.code)==3) {
                 pcv.sat=satid2no(pcv.code);
             }
         }
