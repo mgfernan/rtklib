@@ -124,8 +124,8 @@ static const char *help[]={
 "     -hp pos      rinex header: approx position x/y/z separated by /",
 "     -hd delta    rinex header: antenna delta h/e/n separated by /",
 "     -v ver       rinex version [3.04]",
-"     -od          include doppler frequency in rinex obs [on]",
-"     -os          include snr in rinex obs [on]",
+"     -od          include doppler frequency in rinex obs [off]",
+"     -os          include snr in rinex obs [off]",
 "     -oi          include iono correction in rinex nav header [off]",
 "     -ot          include time correction in rinex nav header [off]",
 "     -ol          include leap seconds in rinex nav header [off]",
@@ -379,11 +379,8 @@ static void setglofcn(const char *argv, rnxopt_t *opt) {
 static int get_filetime(const char *file, gtime_t *time)
 {
     FILE *fp;
-    struct stat st;
-    struct tm *tm;
     uint32_t time_time;
     uint8_t buff[64];
-    double ep[6];
     char path[1024],*paths[1],path_tag[1024];
 
     paths[0]=path;
@@ -402,16 +399,21 @@ static int get_filetime(const char *file, gtime_t *time)
         }
         fclose(fp);
     }
-    /* get modified time of input file */
-    if (!stat(path,&st)&&(tm=gmtime(&st.st_mtime))) {
-        ep[0]=tm->tm_year+1900;
-        ep[1]=tm->tm_mon+1;
-        ep[2]=tm->tm_mday;
-        ep[3]=tm->tm_hour;
-        ep[4]=tm->tm_min;
-        ep[5]=tm->tm_sec;
-        *time=utc2gpst(epoch2time(ep));
-        return 1;
+    /* Get modified time of input file. */
+    struct stat st;
+    if (!stat(path, &st)) {
+        struct tm tm;
+        if (gmtime_r(&st.st_mtime, &tm)) {
+          double ep[6];
+          ep[0] = tm.tm_year + 1900;
+          ep[1] = tm.tm_mon + 1;
+          ep[2] = tm.tm_mday;
+          ep[3] = tm.tm_hour;
+          ep[4] = tm.tm_min;
+          ep[5] = tm.tm_sec;
+          *time = utc2gpst(epoch2time(ep));
+          return 1;
+        }
     }
     return 0;
 }

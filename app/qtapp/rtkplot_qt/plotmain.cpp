@@ -106,7 +106,6 @@ Plot::Plot(QWidget *parent) : QMainWindow(parent), ui(new Ui::Plot)
     setlocale(LC_NUMERIC, "C"); // use point as decimal separator in formatted output
 
     gtime_t t0 = {0, 0};
-    nav_t nav0 = {};
     obs_t obs0 = {};
     sta_t sta0 = {};
     gis_t gis0 = {};
@@ -134,13 +133,10 @@ Plot::Plot(QWidget *parent) : QMainWindow(parent), ui(new Ui::Plot)
     }
 
     obs0.data = NULL; obs0.n = obs0.nmax = 0;
-    nav0.eph = NULL; nav0.n = nav0.nmax = 0;
-    nav0.geph = NULL; nav0.ng = nav0.ngmax = 0;
-    nav0.seph = NULL; nav0.ns = nav0.nsmax = 0;
 
     observationIndex = 0;
     observation = obs0;
-    navigation = nav0;
+    memset(&navigation, 0, sizeof(navigation));
     station = sta0;
     gis = gis0;
     simulatedObservation = 0;
@@ -386,7 +382,7 @@ Plot::~Plot()
     delete [] azimuth;
     delete [] elevation;
 
-    for (int i = 0; i < NFREQ + NEXOBS; i++) delete multipath[i];
+    for (int i = 0; i < NFREQ + NEXOBS; i++) delete [] multipath[i];
 
     delete graphTrack;
     delete graphSingle;

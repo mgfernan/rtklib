@@ -72,7 +72,6 @@ TPlot *Plot;
 __fastcall TPlot::TPlot(TComponent* Owner) : TForm(Owner)
 {
     gtime_t t0={0};
-    nav_t nav0={0};
     obs_t obs0={0};
     sta_t sta0={0};
     gis_t gis0={0};
@@ -99,12 +98,9 @@ __fastcall TPlot::TPlot(TComponent* Owner) : TForm(Owner)
     }
 
     obs0.data=NULL; obs0.n =obs0.nmax =0;
-    nav0.eph =NULL; nav0.n =nav0.nmax =0;
-    nav0.geph=NULL; nav0.ng=nav0.ngmax=0;
-    nav0.seph=NULL; nav0.ns=nav0.nsmax=0;
     ObsIndex=0;
     Obs=obs0;
-    Nav=nav0;
+    memset(&Nav, 0, sizeof(Nav));
     Sta=sta0;
     Gis=gis0;
     SimObs=0;
@@ -2592,12 +2588,13 @@ void __fastcall TPlot::FitRange(int all)
         delete pos2;
         delete pos;
     }
-    xl[0]-=0.05;
-    xl[1]+=0.05;
-    yl[0]-=0.05;
-    yl[1]+=0.05;
-    zl[0]-=0.05;
-    zl[1]+=0.05;
+    // add margins
+    xl[0]-=0.015;
+    xl[1]+=0.015;
+    yl[0]-=0.015;
+    yl[1]+=0.015;
+    zl[0]-=0.015;
+    zl[1]+=0.015;
     
     if (all||PlotType==PLOT_TRK) {
         GraphT->SetLim(xl,yl);

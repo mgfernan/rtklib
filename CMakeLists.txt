@@ -11,22 +11,11 @@ message("RTKLIB version: ${VERSION}-${PATCH_LEVEL}")
 
 project(rtklib LANGUAGES C CXX VERSION 2.4.3)
 
+include(CTest)
+
 option(IERS_MODEL "Use Earth models from IERS" OFF)
 
-# Compilation options
-
-# set(CMAKE_COMPILER_WARNING_FLAGS "-Wall -Wno-comment -Werror=implicit-function-declaration -Wunused-function -Wunused-variable -Wunreachable-code")
-set(CMAKE_COMPILER_WARNING_FLAGS "-Wno-comment -Werror=implicit-function-declaration -Wunreachable-code")
-set(CMAKE_COMPILER_COVERAGE_FLAGS "--coverage -fprofile-arcs -ftest-coverage")
-set(CMAKE_LINKER_COVERAGE_FLAGS  "--coverage -lgcov")
-
-set(CMAKE_C_FLAGS "-O3 ${CMAKE_C_FLAGS} -Werror ${CMAKE_COMPILER_WARNING_FLAGS} -DENABLE_NON_MISRA_FEATURES=1")
-set(CMAKE_C_FLAGS_DEBUG "-g -O0  ${CMAKE_COMPILER_WARNING_FLAGS} ${CMAKE_COMPILER_COVERAGE_FLAGS}")
-SET(CMAKE_C_FLAGS_PROFILER "${CMAKE_COMPILER_COVERAGE_FLAGS} ${CMAKE_C_FLAGS_DEBUG} -pg" CACHE STRING
-    "Flags used by the C compiler to generate gmon.out profiler files."
-    FORCE )
-
-
+set(TEST_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/data)
 # configure rtklib
 add_definitions(-DENAGLO -DENAQZS -DENACMP -DENAGAL -DENAIRN -DNFREQ=3 -DNEXOBS=3 -DTRACE -DSVR_REUSEADDR)
 
@@ -34,9 +23,6 @@ add_subdirectory(submodules/NeQuickJRC)
 add_definitions(-DFTR_MODIP_CCIR_AS_CONSTANTS)  # Make compilation with preloaded MODIP grid and CCIR data
 
 message(STATUS "Submodule Variable: [ ${NEQUICK_LIB_NAME} ]")
-
-# 3rd party libs
-add_subdirectory(lib)
 
 # 3rd party libs
 add_subdirectory(lib)
@@ -62,6 +48,9 @@ if(QT_FOUND)
     message(STATUS "Found Qt. Building Qt apps")
     add_subdirectory(app/qtapp)
 endif()
+
+# tests
+add_subdirectory(test)
 
 #CPACK: General Settings
 set(CPACK_GENERATOR "TBZ2" "RPM" "DEB")

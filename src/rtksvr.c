@@ -425,20 +425,25 @@ static int decoderaw(rtksvr_t *svr, int index)
 /* decode download file ------------------------------------------------------*/
 static void decodefile(rtksvr_t *svr, int index)
 {
-    nav_t nav={0};
-    char file[1024];
-    int nb;
-    
     tracet(4,"decodefile: index=%d\n",index);
-    
+
+    nav_t *nav = (nav_t *)calloc(1, sizeof(nav_t));
+    if (nav == NULL) {
+      trace(1, "decodefile: nav alloc failed\n");
+      return;
+    }
+
     rtksvrlock(svr);
     
     /* check file path completed */
-    if ((nb=svr->nb[index])<=2||
+    int nb = svr->nb[index];
+    if (nb<=2||
         svr->buff[index][nb-2]!='\r'||svr->buff[index][nb-1]!='\n') {
         rtksvrunlock(svr);
+        free(nav);
         return;
     }
+    char file[1024];
     strncpy(file,(char *)svr->buff[index],nb-2); file[nb-2]='\0';
     svr->nb[index]=0;
     
@@ -447,18 +452,19 @@ static void decodefile(rtksvr_t *svr, int index)
     if (svr->format[index]==STRFMT_SP3) { /* precise ephemeris */
         
         /* read sp3 precise ephemeris */
-        readsp3(file,&nav,0);
-        if (nav.ne<=0) {
+        readsp3(file,nav,0);
+        if (nav->ne<=0) {
             tracet(1,"sp3 file read error: %s\n",file);
+            free(nav);
             return;
         }
         /* update precise ephemeris */
         rtksvrlock(svr);
         
         if (svr->nav.peph) free(svr->nav.peph);
-        svr->nav.ne = nav.ne;
-        svr->nav.nemax = nav.nemax;
-        svr->nav.peph=nav.peph;
+        svr->nav.ne = nav->ne;
+        svr->nav.nemax = nav->nemax;
+        svr->nav.peph=nav->peph;
         svr->ftime[index]=utc2gpst(timeget());
         strcpy(svr->files[index],file);
         
@@ -467,22 +473,24 @@ static void decodefile(rtksvr_t *svr, int index)
     else if (svr->format[index]==STRFMT_RNXCLK) { /* precise clock */
         
         /* read rinex clock */
-        if (readrnxc(file,&nav)<=0) {
+        if (readrnxc(file,nav)<=0) {
             tracet(1,"rinex clock file read error: %s\n",file);
+            free(nav);
             return;
         }
         /* update precise clock */
         rtksvrlock(svr);
         
         if (svr->nav.pclk) free(svr->nav.pclk);
-        svr->nav.nc = nav.nc;
-        svr->nav.ncmax = nav.ncmax;
-        svr->nav.pclk=nav.pclk;
+        svr->nav.nc = nav->nc;
+        svr->nav.ncmax = nav->ncmax;
+        svr->nav.pclk=nav->pclk;
         svr->ftime[index]=utc2gpst(timeget());
         strcpy(svr->files[index],file);
         
         rtksvrunlock(svr);
     }
+    free(nav);
 }
 /* carrier-phase bias (fcb) correction ---------------------------------------*/
 static void corr_phase_bias(obsd_t *obs, int n, const nav_t *nav)
@@ -598,7 +606,6 @@ static void *rtksvrthread(void *arg)
 {
     rtksvr_t *svr=(rtksvr_t *)arg;
     obs_t obs;
-    obsd_t data[MAXOBS*2];
     sol_t sol={{0}};
     double tt;
     uint32_t tick,ticknmea,tick1hz,tickreset;
@@ -608,11 +615,20 @@ static void *rtksvrthread(void *arg)
     
     tracet(3,"rtksvrthread:\n");
     
-    svr->state=1; obs.data=data;
+    obsd_t *data = (obsd_t *)calloc(MAXOBS * 2, sizeof(obsd_t));
+    if (data == NULL) {
+      trace(1, "rtksvrthread: obsd_t alloc failed\n");
+      return 0;
+    }
+    obs.data = data;
+    obs.n = 0;
+    obs.nmax = MAXOBS * 2;
+
+    svr->state=1;
     svr->tick=tickget();
     ticknmea=tick1hz=svr->tick-1000;
     tickreset=svr->tick-MIN_INT_RESET;
-    
+
     for (cycle=0;svr->state;cycle++) {
         tick=tickget();
         for (i=0;i<3;i++) {
@@ -707,6 +723,7 @@ static void *rtksvrthread(void *arg)
         /* sleep until next cycle */
         sleepms(svr->cycle-cputime);
     }
+    free(data);
     for (i=0;i<MAXSTRRTK;i++) strclose(svr->stream+i);
     for (i=0;i<3;i++) {
         svr->nb[i]=svr->npb[i]=0;

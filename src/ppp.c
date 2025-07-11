@@ -716,7 +716,7 @@ static void uddcb_ppp(rtk_t *rtk)
 /* temporal update of phase biases -------------------------------------------*/
 static void udbias_ppp(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
 {
-    double L[NFREQ],P[NFREQ],Lc,Pc,bias[MAXOBS],offset=0.0,pos[3]={0};
+    double L[NFREQ],P[NFREQ],Lc,Pc,bias[MAXOBS],offset=0.0;
     double freq1,freq2,ion,dantr[NFREQ]={0},dants[NFREQ]={0};
     int i,j,k,f,sat,slip[MAXOBS]={0},clk_jump=0;
 
@@ -737,8 +737,6 @@ static void udbias_ppp(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
 
     /* detect slip by Melbourne-Wubbena linear combination jump */
     detslp_mw(rtk,obs,n,nav);
-
-    ecef2pos(rtk->sol.rr,pos);
 
     for (f=0;f<NF(&rtk->opt);f++) {
 

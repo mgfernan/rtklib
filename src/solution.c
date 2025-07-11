@@ -1513,6 +1513,9 @@ extern int outprcopts(uint8_t *buff, const prcopt_t *opt)
         if (opt->navsys&SYS_GLO) {
             p+=sprintf(p,"%s amb glo   : %s\r\n",COMMENTH,s9[opt->glomodear]);
         }
+        if (opt->navsys&SYS_CMP) {
+            p+=sprintf(p,"%s amb bds   : %s\r\n",COMMENTH,opt->bdsmodear?"on":"off");
+        }
         if (opt->thresar[0]>0.0) {
             p+=sprintf(p,"%s val thres : %.1f\r\n",COMMENTH,opt->thresar[0]);
         }

@@ -1253,6 +1253,7 @@ void MainWindow::serverStart()
     updatePlot();
 
     ui->btnStart->setVisible(false);
+    ui->btnStart->setEnabled(false);
     ui->btnOptions->setEnabled(false);
     ui->btnExit->setEnabled(false);
     ui->btnInputStream->setEnabled(false);
@@ -1293,6 +1294,7 @@ void MainWindow::serverStop()
     for (i = 0; i < 3; i++) delete[] cmds[i];
 
     ui->btnStart->setVisible(true);
+    ui->btnStart->setEnabled(true);
     ui->btnOptions->setEnabled(true);
     ui->btnExit->setEnabled(true);
     ui->btnInputStream->setEnabled(true);
@@ -2303,8 +2305,7 @@ void MainWindow::saveLogs()
 
         data = tr("%% program : %1 ver. %2 %3\n").arg(PRGNAME, VER_RTKLIB, PATCH_LEVEL);
         str << data;
-        if (optDialog->processingOptions.mode == PMODE_DGPS || optDialog->processingOptions.mode == PMODE_KINEMA ||
-            optDialog->processingOptions.mode == PMODE_STATIC) {
+        if (optDialog->processingOptions.mode >= PMODE_DGPS && optDialog->processingOptions.mode <= PMODE_FIXED) {
             ecef2pos(optDialog->processingOptions.rb, pos);
             data = QStringLiteral("%% ref pos   :%1 %2 %3\n").arg(pos[0] * R2D, 13, 'f', 9)
                    .arg(pos[1] * R2D, 14, 'f', 9).arg(pos[2], 10, 'f', 4);

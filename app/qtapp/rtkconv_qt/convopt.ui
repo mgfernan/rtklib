@@ -490,6 +490,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="cBSortSats">
+        <property name="toolTip">
+         <string>Sort observations by their internal satellite number</string>
+        </property>
+        <property name="text">
+         <string>Sort Satellites</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QCheckBox" name="cBPhaseShift">
         <property name="toolTip">
          <string>Output phase shift correction</string>
@@ -754,12 +764,18 @@
            <property name="text">
             <string>L3</string>
            </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QCheckBox" name="cBFreq4">
            <property name="text">
             <string>L4</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
            </property>
           </widget>
          </item>
@@ -768,12 +784,18 @@
            <property name="text">
             <string>L5</string>
            </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QCheckBox" name="cBFreq6">
            <property name="text">
             <string>L6</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
            </property>
           </widget>
          </item>

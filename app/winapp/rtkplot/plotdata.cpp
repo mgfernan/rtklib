@@ -145,7 +145,6 @@ void __fastcall TPlot::ReadSolStat(TStrings *files, int sel)
 void __fastcall TPlot::ReadObs(TStrings *files)
 {
     obs_t obs={0};
-    nav_t nav={0};
     sta_t sta={0};
     AnsiString s;
     char file[1024];
@@ -158,13 +157,21 @@ void __fastcall TPlot::ReadObs(TStrings *files)
     ReadWaitStart();
     ShowLegend(NULL);
     
-    if ((nobs=ReadObsRnx(files,&obs,&nav,&sta))<=0) {
+    nav_t *nav = static_cast<nav_t *>(calloc(1, sizeof(nav_t)));
+    if (nav == NULL) {
+      trace(1, "TPlot::ReadObs nav alloc failed\n");
+      return;
+    }
+
+    if ((nobs=ReadObsRnx(files,&obs,nav,&sta))<=0) {
         ReadWaitEnd();
+        free(nav);
         return;
     }
     ClearObs();
     Obs=obs;
-    Nav=nav;
+    Nav=*nav;
+    free(nav);
     Sta=sta;
     SimObs=0;
     UpdateObs(nobs);
@@ -1297,11 +1304,20 @@ void __fastcall TPlot::UpdateMp(void)
     
     for (i=0;i<Obs.n;i++) {
         data=Obs.data+i;
-        freq1=sat2freq(data->sat,data->code[0],&Nav);
-        freq2=sat2freq(data->sat,data->code[1],&Nav);
-        if (data->L[0]==0.0||data->L[1]==0.0||freq1==0.0||freq2==0.0) continue;
-        I=-CLIGHT*(data->L[0]/freq1-data->L[1]/freq2)/(1.0-SQR(freq1/freq2));
-        
+	/* choose two frequencies to calculate reference I */
+        for (j = 0; j < NFREQ + NEXOBS; j++) {
+            freq1 = sat2freq(data->sat, data->code[j], &Nav);
+            if (data->L[j] == 0.0 || freq1 == 0.0 ) continue;
+            for (k = j + 1; k < NFREQ + NEXOBS; k++) {
+                freq2 = sat2freq(data->sat, data->code[k], &Nav);
+                if (data->L[k] == 0.0 || freq2 == 0.0 || freq1 == freq2) continue;
+                I = -CLIGHT * (data->L[j] / freq1-data->L[k] / freq2) / (1.0 - SQR(freq1 / freq2));
+                break;
+            }
+            break;
+        }
+        if (freq1 == 0.0 || freq2 == 0.0) continue;
+
         for (j=0;j<NFREQ+NEXOBS;j++) {
             freq=sat2freq(data->sat,data->code[j],&Nav);
             if (data->P[j]==0.0||data->L[j]==0.0||freq==0.0) continue;

@@ -1383,6 +1383,9 @@ static int readrnxnavb(FILE *fp, const char *opt, double ver, int sys,
     /* set system mask */
     mask=set_sysmask(opt);
 
+    // Number of elements for GLONASS.
+    int nglo = ver >= 3.05 ? 19 : 15;
+
     while (fgets(buff,MAXRNXLEN,fp)) {
 
         if (i==0) {
@@ -1429,7 +1432,7 @@ static int readrnxnavb(FILE *fp, const char *opt, double ver, int sys,
                 data[i++]=str2num(p,0,19);
             }
             /* decode ephemeris */
-            if (sys==SYS_GLO&&i>=15) {
+            if (sys==SYS_GLO&&i>=nglo) {
                 if (!(mask&sys)) return 0;
                 *type=1;
                 return decode_geph(ver,sat,toc,data,geph);
